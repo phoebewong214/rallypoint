@@ -1,15 +1,10 @@
 import React, { useState } from "react";
 import { TopNav, Icon } from "../rally-shared";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 
-const USER = {
-  name: "Alex Rivera",
-  initials: "AR",
-  handle: "@alexr",
-  ntrp: "3.5",
-  primarySport: "Pickleball",
-  secondarySport: "Tennis",
-  location: "Berkeley, CA",
-  joined: "Jan 2025",
+/* Bio + stats stay as placeholders until /api/users/me is wired up. */
+const PROFILE_EXTRAS = {
   bio: "Capstone student picking up pickleball this semester. Looking for steady weekend partners around Berkeley — I play three times a week and I'm working on my third shot drop and dinking consistency. Tennis background (NTRP 3.0 backhand still in progress).",
   stats: { played: 27, wins: 18, losses: 9, winRate: 67, streak: 4 },
 };
@@ -38,13 +33,131 @@ const ACHIEVEMENTS = [
   { icon: "stats",    name: "100 Matches",    unlocked: false },
 ];
 
+interface EditModalProps {
+  initial: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" };
+  onClose: () => void;
+  onSave: (patch: EditModalProps["initial"]) => Promise<void>;
+}
+
+function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
+  const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const set = (k: keyof typeof form) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(form);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2 className="modal-title">Edit profile</h2>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="field-label"><Icon name="user" size={13} /> Name</label>
+            <input className="input" value={form.name} onChange={set("name")} />
+          </div>
+          <div className="field">
+            <label className="field-label"><Icon name="pin" size={13} /> Location</label>
+            <input className="input" value={form.location} onChange={set("location")} placeholder="Berkeley, CA" />
+          </div>
+          <div className="field">
+            <label className="field-label"><Icon name="trophy" size={13} /> Primary Sport</label>
+            <div className="pill-group" role="tablist">
+              <button
+                type="button"
+                className={"pill" + (form.primarySport === "Pickleball" ? " active" : "")}
+                onClick={() => set("primarySport")("Pickleball")}
+              >
+                <Icon name="paddle" size={15} /> Pickleball
+              </button>
+              <button
+                type="button"
+                className={"pill" + (form.primarySport === "Tennis" ? " active" : "")}
+                onClick={() => set("primarySport")("Tennis")}
+              >
+                <Icon name="tennis" size={15} /> Tennis
+              </button>
+            </div>
+          </div>
+          <div className="field">
+            <label className="field-label"><Icon name="edit" size={13} /> Bio</label>
+            <textarea
+              className="textarea"
+              value={form.bio}
+              onChange={set("bio")}
+              placeholder="Tell other players a bit about your game…"
+              maxLength={1000}
+            />
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" type="button" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfilePage() {
+  const { user: authUser, updateProfile } = useAuth();
+  const { show } = useToast();
   // eslint-disable-next-line no-unused-vars
   const [tab, setTab] = useState("matches");
+  const [editOpen, setEditOpen] = useState(false);
+  const [localBio, setLocalBio] = useState<string | null>(null);
+
+  /* Merge live auth user with placeholder bio/stats. */
+  const USER = {
+    name: authUser?.name ?? "Player",
+    initials: authUser?.initials ?? "P",
+    handle: authUser?.handle ?? "@player",
+    ntrp: authUser?.ntrp ?? "3.5",
+    primarySport: authUser?.primarySport ?? "Pickleball",
+    secondarySport: authUser?.secondarySport ?? "Tennis",
+    location: authUser?.location ?? "Berkeley, CA",
+    joined: authUser?.joined ?? "Jan 2025",
+    ...PROFILE_EXTRAS,
+    bio: localBio ?? (authUser as any)?.bio ?? PROFILE_EXTRAS.bio,
+  };
+
+  const handleSave = async (patch: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" }) => {
+    try {
+      await updateProfile(patch);
+      setLocalBio(patch.bio);
+      setEditOpen(false);
+      show("Profile updated", "success");
+    } catch (err: any) {
+      show(err?.message || "Couldn't save profile", "error");
+    }
+  };
+
+  const handleShare = async () => {
+    const url = window.location.origin + "/profile";
+    try {
+      await navigator.clipboard.writeText(url);
+      show("Profile link copied to clipboard", "success");
+    } catch {
+      show("Couldn't copy link", "error");
+    }
+  };
 
   return (
     <>
-      <TopNav active={null} user={{ name: USER.name, initials: USER.initials }} />
+      <TopNav />
 
       <main className="page">
         {/* Hero */}
@@ -78,10 +191,10 @@ function ProfilePage() {
             </div>
 
             <div className="hero-actions">
-              <button className="btn-ghost">
+              <button className="btn-ghost" type="button" onClick={handleShare}>
                 <Icon name="share" size={15} /> Share
               </button>
-              <button className="btn-primary">
+              <button className="btn-primary" type="button" onClick={() => setEditOpen(true)}>
                 <Icon name="edit" size={15} stroke={2.4} /> Edit Profile
               </button>
             </div>
@@ -127,7 +240,7 @@ function ProfilePage() {
                   <span className="ico"><Icon name="user" size={15} /></span>
                   About
                 </h2>
-                <button className="panel-action">
+                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}>
                   <Icon name="edit" size={13} /> Edit
                 </button>
               </div>
@@ -141,7 +254,11 @@ function ProfilePage() {
                   <span className="ico green"><Icon name="trophy" size={15} /></span>
                   Recent Matches
                 </h2>
-                <button className="panel-action">
+                <button
+                  className="panel-action"
+                  type="button"
+                  onClick={() => { window.location.href = "/sessions"; }}
+                >
                   View all <Icon name="chevron-r" size={13} />
                 </button>
               </div>
@@ -212,7 +329,7 @@ function ProfilePage() {
                   <span className="ico green"><Icon name="calendar" size={15} /></span>
                   Availability
                 </h2>
-                <button className="panel-action">
+                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}>
                   <Icon name="edit" size={13} /> Edit
                 </button>
               </div>
@@ -279,6 +396,19 @@ function ProfilePage() {
           </aside>
         </section>
       </main>
+
+      {editOpen && (
+        <EditProfileModal
+          initial={{
+            name: USER.name,
+            bio: USER.bio,
+            location: USER.location,
+            primarySport: USER.primarySport as "Tennis" | "Pickleball",
+          }}
+          onClose={() => setEditOpen(false)}
+          onSave={handleSave}
+        />
+      )}
     </>
   );
 }

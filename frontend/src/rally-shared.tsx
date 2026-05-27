@@ -1,15 +1,29 @@
 /* ============================================================
-   RallyPoint — Shared React components (Nav + Icons + Avatar)
-   ES module — used by every page.
+   RallyPoint — Shared React components (Icons + Avatar + TopNav)
    ============================================================ */
-import React from "react";
+import React, { SVGProps } from "react";
 import { Link, NavLink } from "react-router-dom";
+import type { IconName, NavId } from "./types";
+import { useAuth } from "./contexts/AuthContext";
+import { useTheme } from "./contexts/ThemeContext";
 
-export const Icon = ({ name, size = 16, stroke = 2, ...p }) => {
+type IconProps = SVGProps<SVGSVGElement> & {
+  name: IconName;
+  size?: number;
+  stroke?: number;
+};
+
+export const Icon: React.FC<IconProps> = ({ name, size = 16, stroke = 2, ...p }) => {
   const common = {
-    width: size, height: size, viewBox: "0 0 24 24",
-    fill: "none", stroke: "currentColor", strokeWidth: stroke,
-    strokeLinecap: "round", strokeLinejoin: "round", ...p
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: stroke,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    ...p,
   };
   switch (name) {
     case "search":   return <svg {...common}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>;
@@ -46,12 +60,16 @@ export const Icon = ({ name, size = 16, stroke = 2, ...p }) => {
     case "x":        return <svg {...common}><path d="M6 6l12 12M18 6 6 18"/></svg>;
     case "logout":   return <svg {...common}><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5M5 12h14"/></svg>;
     case "bell":     return <svg {...common}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>;
+    case "sun":      return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>;
+    case "moon":     return <svg {...common}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
     default: return null;
   }
 };
 
-/* Avatar palette — stable colors for a given name/initial */
-const AVATAR_PALETTE = [
+/* ===== Avatar palette ===== */
+type AvatarPalette = { bg: string; fg: string };
+
+const AVATAR_PALETTE: AvatarPalette[] = [
   { bg: "linear-gradient(135deg, #B8FF1A, #8FD600)", fg: "#0A1A00" },
   { bg: "linear-gradient(135deg, #2EA8FF, #1B7FCC)", fg: "#FFFFFF" },
   { bg: "linear-gradient(135deg, #FF6B9D, #C93B73)", fg: "#FFFFFF" },
@@ -60,16 +78,43 @@ const AVATAR_PALETTE = [
   { bg: "linear-gradient(135deg, #34D399, #0F9D6E)", fg: "#06281C" },
   { bg: "linear-gradient(135deg, #F87171, #DC2626)", fg: "#FFFFFF" },
 ];
-export const avatarFor = (seed) => {
+
+export const avatarFor = (seed?: string | null): AvatarPalette => {
   const s = (seed || "?").toString();
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
 };
 
-export const Avatar = ({ name, size = "md", initials, color, fg, online }) => {
-  const inits = initials || (name || "?").split(" ").filter(Boolean).map(s => s[0]).join("").slice(0, 2).toUpperCase();
-  const pal = (color && fg) ? { bg: color, fg } : avatarFor(name || inits);
+type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
+
+export interface AvatarProps {
+  name?: string | null;
+  size?: AvatarSize;
+  initials?: string;
+  color?: string;
+  fg?: string;
+  online?: boolean;
+}
+
+export const Avatar: React.FC<AvatarProps> = ({
+  name,
+  size = "md",
+  initials,
+  color,
+  fg,
+  online,
+}) => {
+  const inits =
+    initials ||
+    (name || "?")
+      .split(" ")
+      .filter(Boolean)
+      .map((s) => s[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  const pal = color && fg ? { bg: color, fg } : avatarFor(name || inits);
   return (
     <div className={"avatar size-" + size} style={{ background: pal.bg, color: pal.fg }}>
       {inits}
@@ -78,53 +123,91 @@ export const Avatar = ({ name, size = "md", initials, color, fg, online }) => {
   );
 };
 
-/* Top Nav — used by every page. Uses react-router for client-side navigation. */
-export const TopNav = ({ active = "find", user = { name: "Alex Rivera", initials: "AR" } }) => {
-  const links = [
-    { id: "find",     label: "Find Partners", to: "/find" },
-    { id: "matches",  label: "My Matches",    to: "/sessions" },
-    { id: "feed",     label: "Feed",          to: "/feed" },
-    { id: "courts",   label: "Courts",        to: "/courts" },
-    { id: "schedule", label: "Schedule",      to: null },
-  ];
+/* ===== Top Nav =====
+   Pulls the active user from AuthContext, so pages don't need to pass it.
+   Pass `active` to highlight a specific nav link; otherwise relies on the
+   current route via NavLink. Pass `hideUser` on the login page. */
+export interface TopNavProps {
+  active?: NavId | null;
+  hideUser?: boolean;
+  hideLinks?: boolean;
+}
+
+interface NavLinkDef {
+  id: NavId;
+  label: string;
+  to: string;
+}
+
+const NAV_LINKS: NavLinkDef[] = [
+  { id: "find",     label: "Find Partners", to: "/find" },
+  { id: "matches",  label: "My Matches",    to: "/sessions" },
+  { id: "feed",     label: "Feed",          to: "/feed" },
+  { id: "courts",   label: "Courts",        to: "/courts" },
+  { id: "schedule", label: "Schedule",      to: "/schedule" },
+];
+
+export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) => {
+  const { user, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
+  const showUser = !hideUser && !!user;
+
   return (
     <nav className="nav">
       <div className="nav-inner">
-        <Link className="logo" to="/find">
+        <Link className="logo" to={user ? "/find" : "/"}>
           <div className="logo-mark">R</div>
           RallyPoint
         </Link>
-        <div className="nav-links">
-          {links.map((l) => {
-            const className = "nav-link" + (active === l.id ? " active" : "");
-            if (!l.to) {
-              return <a key={l.id} className={className} href="#">{l.label}</a>;
-            }
-            return (
+        {!hideLinks && (
+          <div className="nav-links">
+            {NAV_LINKS.map((l) => (
               <NavLink
                 key={l.id}
                 to={l.to}
+                end
                 className={({ isActive }) =>
                   "nav-link" + (active === l.id || isActive ? " active" : "")
                 }
-                end
               >
                 {l.label}
               </NavLink>
-            );
-          })}
-        </div>
-        <div className="nav-spacer" />
-        {user ? (
-          <Link className="nav-pill" to="/profile">
-            <span>{user.name}</span>
-            <div className="nav-avatar">{user.initials}</div>
-          </Link>
-        ) : (
-          <Link className="nav-pill" to="/">
-            <span>Sign In</span>
-          </Link>
+            ))}
+          </div>
         )}
+        <div className="nav-spacer" />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="btn-icon-sq"
+            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            aria-label="Toggle theme"
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
+          </button>
+          {showUser && user ? (
+            <>
+              <Link className="nav-pill" to="/profile">
+                <span>{user.name}</span>
+                <div className="nav-avatar">{user.initials}</div>
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="btn-icon-sq"
+                title="Sign out"
+                aria-label="Sign out"
+              >
+                <Icon name="logout" size={16} />
+              </button>
+            </>
+          ) : (
+            <Link className="nav-pill" to="/">
+              <span>Sign In</span>
+            </Link>
+          )}
+        </div>
       </div>
     </nav>
   );

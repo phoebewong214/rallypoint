@@ -1,11 +1,17 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { TopNav, Icon } from "../rally-shared";
+import { useAuth } from "../contexts/AuthContext";
 
 const NTRP_LEVELS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 
 function LoginPage() {
+  const { login, signup } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState("signup"); // "signin" | "signup"
   const [showPwd, setShowPwd] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -17,24 +23,46 @@ function LoginPage() {
 
   const isSignup = mode === "signup";
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.email || !form.password || (isSignup && !form.name)) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      if (isSignup) {
+        await signup({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          sport: form.sport,
+          ntrp: form.ntrp,
+        });
+      } else {
+        await login(form.email, form.password);
+      }
+      navigate("/find", { replace: true });
+    } catch (err) {
+      setError(err?.message || "Something went wrong. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
-      <TopNav active={null} user={null} />
+      <TopNav hideUser hideLinks />
 
       <div className="auth-shell">
         <div className="auth-wrap">
-          {/* floating chips */}
-          <div className="float-chip chip-tl">
-            <span className="dot" />
-            247 players online
-          </div>
-          <div className="float-chip chip-br">
-            <Icon name="bolt" size={14} stroke={2.4} />
-            Find your match in 30s
-          </div>
-
           <div className="auth-card">
             <div className="auth-brand">
+              <div className="auth-status">
+                <span className="dot" />
+                247 players online
+              </div>
               <div className="logo-mark">R</div>
               <h1 className="auth-title">
                 {isSignup ? <>Join the <em>rally.</em></> : <>Welcome <em>back.</em></>}
@@ -63,7 +91,7 @@ function LoginPage() {
             </div>
 
             {/* Form */}
-            <div className="form-grid">
+            <form className="form-grid" onSubmit={handleSubmit}>
               {isSignup && (
                 <div className="field">
                   <label className="field-label"><Icon name="user" size={13} /> Full Name</label>
@@ -86,7 +114,7 @@ function LoginPage() {
                   <input
                     type="email"
                     className="input"
-                    placeholder="you@university.edu"
+                    placeholder="you@example.com"
                     value={form.email}
                     onChange={set("email")}
                   />
@@ -96,7 +124,16 @@ function LoginPage() {
               <div className="field">
                 <div className="pwd-row">
                   <label className="field-label"><Icon name="lock" size={13} /> Password</label>
-                  {!isSignup && <a className="link" href="#">Forgot password?</a>}
+                  {!isSignup && (
+                    <button
+                      type="button"
+                      className="link"
+                      style={{ background: "none", border: "none", padding: 0 }}
+                      onClick={() => alert("Password reset coming soon")}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
                 <div className="input-with-icon">
                   <span className="leading"><Icon name="lock" size={16} /></span>
@@ -166,18 +203,37 @@ function LoginPage() {
                 </>
               )}
 
-              <button className="btn-primary full lg" style={{ marginTop: 6 }}>
-                {isSignup ? "Create Account" : "Sign In"}
-                <Icon name="chevron-r" size={16} stroke={2.5} />
+              {error && (
+                <p style={{
+                  color: "var(--rose)", background: "var(--rose-ghost)",
+                  border: "1px solid rgba(229,72,77,0.32)", borderRadius: 8,
+                  padding: "8px 12px", fontSize: 13, fontWeight: 600, margin: 0
+                }}>
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="btn-primary full lg"
+                style={{ marginTop: 6, opacity: submitting ? 0.7 : 1 }}
+              >
+                {submitting
+                  ? (isSignup ? "Creating account…" : "Signing in…")
+                  : (isSignup ? "Create Account" : "Sign In")}
+                {!submitting && <Icon name="chevron-r" size={16} stroke={2.5} />}
               </button>
 
               {isSignup && (
                 <p className="legal">
                   By signing up you agree to RallyPoint's{" "}
-                  <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.
+                  <a href="/terms" onClick={(e) => e.preventDefault()}>Terms</a>{" "}
+                  and{" "}
+                  <a href="/privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a>.
                 </p>
               )}
-            </div>
+            </form>
 
             <div className="divider-or">or continue with</div>
 

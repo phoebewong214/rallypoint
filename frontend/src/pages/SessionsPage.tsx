@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { TopNav, Icon, Avatar } from "../rally-shared";
+import { useSessions, useAcceptSession, useDeclineSession } from "../hooks/useSessions";
+import { useToast } from "../contexts/ToastContext";
 
 const SESSIONS = [
   // ----- Upcoming -----
@@ -101,7 +103,13 @@ const SportIcon = ({ sport, ...rest }) => (
   <Icon name={sport === "Tennis" ? "tennis" : "paddle"} {...rest} />
 );
 
-function SessionRow({ s }) {
+function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
+  s: any;
+  onAccept: (id: number) => void;
+  onDecline: (id: number) => void;
+  onSoon: (feature: string) => void;
+  busy?: boolean;
+}) {
   return (
     <article className={"session" + (s.next ? " next" : "")}>
       <div className="date-block">
@@ -161,31 +169,35 @@ function SessionRow({ s }) {
         <div className="sess-actions">
           {s.status === "confirmed" && (
             <>
-              <button className="btn-sm primary">
+              <button className="btn-sm primary" type="button" onClick={() => onSoon("Messaging")}>
                 <Icon name="message" size={14} stroke={2.4} /> Message
               </button>
-              <button className="btn-sm icon-only" title="Reschedule"><Icon name="calendar" size={15} /></button>
-              <button className="btn-sm icon-only" title="More"><Icon name="more" size={16} /></button>
+              <button className="btn-sm icon-only" title="Reschedule" type="button" onClick={() => onSoon("Rescheduling")}>
+                <Icon name="calendar" size={15} />
+              </button>
+              <button className="btn-sm icon-only" title="More" type="button" onClick={() => onSoon("More actions")}>
+                <Icon name="more" size={16} />
+              </button>
             </>
           )}
           {s.status === "pending" && (
             <>
-              <button className="btn-sm ghost">Reschedule</button>
-              <button className="btn-sm danger">Cancel</button>
+              <button className="btn-sm ghost" type="button" onClick={() => onSoon("Rescheduling")}>Reschedule</button>
+              <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Cancel</button>
             </>
           )}
           {s.status === "requested" && (
             <>
-              <button className="btn-sm primary">
-                <Icon name="check" size={14} stroke={2.5} /> Accept
+              <button className="btn-sm primary" type="button" onClick={() => onAccept(s.id)} disabled={busy}>
+                <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
               </button>
-              <button className="btn-sm danger">Decline</button>
+              <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Decline</button>
             </>
           )}
           {s.status === "completed" && (
             <>
-              <button className="btn-sm ghost">View Details</button>
-              <button className="btn-sm primary">
+              <button className="btn-sm ghost" type="button" onClick={() => onSoon("Match details")}>View Details</button>
+              <button className="btn-sm primary" type="button" onClick={() => onSoon("Rematch booking")}>
                 <Icon name="bolt" size={13} stroke={2.4} /> Rematch
               </button>
             </>
@@ -204,35 +216,69 @@ const TABS = [
 
 function SessionsPage() {
   const [tab, setTab] = useState("upcoming");
+  const { show, soon } = useToast();
+
+  /* API-first with fallback to the rich local SESSIONS demo array. */
+  const { data: apiData, isError: apiError } = useSessions();
+  const liveSessions = apiData?.sessions?.length ? apiData.sessions : null;
+  const sessions = liveSessions ?? (SESSIONS as any);
+  const dataSource: "live" | "demo" = liveSessions ? "live" : "demo";
+
+  const accept = useAcceptSession();
+  const decline = useDeclineSession();
+
+  const handleAccept = (id: number) => {
+    accept.mutate(id, {
+      onSuccess: () => show("Session accepted", "success"),
+      onError:   () => show("Couldn't accept — try again", "error"),
+    });
+  };
+  const handleDecline = (id: number) => {
+    decline.mutate(id, {
+      onSuccess: () => show("Session declined", "success"),
+      onError:   () => show("Couldn't decline — try again", "error"),
+    });
+  };
+  const busyId = accept.isPending
+    ? accept.variables
+    : decline.isPending
+    ? decline.variables
+    : null;
 
   const counts = useMemo(() => ({
-    upcoming: SESSIONS.filter((s) => s.bucket === "upcoming").length,
-    requests: SESSIONS.filter((s) => s.bucket === "requests").length,
-    past:     SESSIONS.filter((s) => s.bucket === "past").length,
-  }), []);
+    upcoming: sessions.filter((s: any) => s.bucket === "upcoming").length,
+    requests: sessions.filter((s: any) => s.bucket === "requests").length,
+    past:     sessions.filter((s: any) => s.bucket === "past").length,
+  }), [sessions]);
 
-  const visible = SESSIONS.filter((s) => s.bucket === tab);
+  const visible = sessions.filter((s: any) => s.bucket === tab);
 
   return (
     <>
-      <TopNav active="matches" user={{ name: "Alex Rivera", initials: "AR" }} />
+      <TopNav active="matches" />
 
       <main className="page">
         <header className="page-head">
           <div>
-            <div className="eyebrow"><span className="dot" /> {counts.upcoming + counts.requests} upcoming & pending</div>
+            <div className="eyebrow">
+              <span className="dot" />
+              {dataSource === "live"
+                ? `Live · ${counts.upcoming + counts.requests} upcoming & pending`
+                : `Demo · ${counts.upcoming + counts.requests} upcoming & pending`}
+              {apiError && " · backend offline"}
+            </div>
             <h1 className="h1">My <em>sessions.</em></h1>
             <p className="sub">
               Track every match — from the request to the final score.
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, paddingBottom: 4 }}>
-            <button className="btn-ghost">
+            <button className="btn-ghost" type="button" onClick={() => soon("Calendar sync")}>
               <Icon name="calendar" size={15} /> Calendar
             </button>
-            <button className="btn-primary">
+            <Link to="/find" className="btn-primary" style={{ textDecoration: "none" }}>
               <Icon name="plus" size={16} stroke={2.5} /> Schedule Game
-            </button>
+            </Link>
           </div>
         </header>
 
@@ -293,7 +339,16 @@ function SessionsPage() {
               </Link>
             </div>
           ) : (
-            visible.map((s) => <SessionRow key={s.id} s={s} />)
+            visible.map((s: any) => (
+              <SessionRow
+                key={s.id}
+                s={s}
+                onAccept={handleAccept}
+                onDecline={handleDecline}
+                onSoon={soon}
+                busy={busyId === s.id}
+              />
+            ))
           )}
         </div>
       </main>
