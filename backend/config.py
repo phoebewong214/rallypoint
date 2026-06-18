@@ -44,6 +44,9 @@ class Config:
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     SMTP_FROM = os.environ.get("SMTP_FROM", "RallyPoint <no-reply@rallypoint.app>")
     SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+    # Resend HTTP API (preferred over SMTP — port 443, not blocked by PaaS hosts).
+    # Falls back to SMTP_PASSWORD when that's already a `re_...` key.
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
     # Lifetimes for single-use action tokens (minutes).
     VERIFY_TOKEN_TTL_MIN = int(os.environ.get("VERIFY_TOKEN_TTL_MIN", str(60 * 24)))

@@ -1,15 +1,25 @@
 """
-Transactional email over SMTP.
+Transactional email.
 
-In dev (no SMTP_HOST configured) emails are logged to the app logger instead
-of being sent, so the verification / reset flows are fully testable without a
-mail provider — look for the link in the backend console.
+Preferred path is the Resend HTTP API (https://api.resend.com/emails) over
+port 443 — PaaS hosts like Render often block outbound SMTP ports, so SMTP
+connections time out. The HTTP API avoids that entirely and is Resend's
+recommended integration.
 
-Sending is best-effort: callers should never let a mail failure break the
+Resolution order in send_email():
+  1. A Resend API key (RESEND_API_KEY, or SMTP_PASSWORD when it's a `re_...`
+     key) → send via the HTTP API.
+  2. Otherwise SMTP_HOST set → legacy SMTP send.
+  3. Otherwise (dev) → log the message (and links) to the console.
+
+Sending is best-effort: callers must never let a mail failure break the
 request (e.g. signup must still succeed if the welcome email bounces).
 """
 from __future__ import annotations
+import json
 import smtplib
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 
 from flask import current_app
@@ -20,28 +30,47 @@ def _build_url(path: str, token: str) -> str:
     return f"{base}{path}?token={token}"
 
 
-def send_email(to: str, subject: str, body: str) -> bool:
-    """Send a plain-text email. Returns True if sent/logged, False on error."""
+def _resend_api_key() -> str:
     cfg = current_app.config
-    host = cfg.get("SMTP_HOST")
+    key = cfg.get("RESEND_API_KEY") or cfg.get("SMTP_PASSWORD") or ""
+    return key if key.startswith("re_") else ""
 
-    if not host:
-        # Dev fallback — surface the email (and any links) in the console.
-        current_app.logger.info(
-            "[email:dev] no SMTP_HOST set — would send to %s\n"
-            "  Subject: %s\n%s",
-            to, subject, "\n".join("  " + line for line in body.splitlines()),
-        )
-        return True
 
+def _send_via_resend_api(to: str, subject: str, body: str) -> bool:
+    cfg = current_app.config
+    payload = json.dumps(
+        {"from": cfg["SMTP_FROM"], "to": [to], "subject": subject, "text": body}
+    ).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {_resend_api_key()}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError as e:  # Resend rejected the request
+        detail = e.read().decode("utf-8", "replace")[:500]
+        current_app.logger.error("Resend API %s for %s: %s", e.code, to, detail)
+        return False
+    except Exception:  # noqa: BLE001 — mail must never crash the request
+        current_app.logger.exception("Failed to send email via Resend API to %s", to)
+        return False
+
+
+def _send_via_smtp(to: str, subject: str, body: str) -> bool:
+    cfg = current_app.config
     msg = EmailMessage()
     msg["From"] = cfg["SMTP_FROM"]
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(body)
-
     try:
-        with smtplib.SMTP(host, cfg["SMTP_PORT"], timeout=10) as server:
+        with smtplib.SMTP(cfg["SMTP_HOST"], cfg["SMTP_PORT"], timeout=10) as server:
             if cfg.get("SMTP_USE_TLS"):
                 server.starttls()
             if cfg.get("SMTP_USER"):
@@ -49,8 +78,25 @@ def send_email(to: str, subject: str, body: str) -> bool:
             server.send_message(msg)
         return True
     except Exception:  # noqa: BLE001 — mail must never crash the request
-        current_app.logger.exception("Failed to send email to %s", to)
+        current_app.logger.exception("Failed to send email via SMTP to %s", to)
         return False
+
+
+def send_email(to: str, subject: str, body: str) -> bool:
+    """Send a plain-text email. Returns True if sent/logged, False on error."""
+    if _resend_api_key():
+        return _send_via_resend_api(to, subject, body)
+
+    if current_app.config.get("SMTP_HOST"):
+        return _send_via_smtp(to, subject, body)
+
+    # Dev fallback — surface the email (and any links) in the console.
+    current_app.logger.info(
+        "[email:dev] no email transport configured — would send to %s\n"
+        "  Subject: %s\n%s",
+        to, subject, "\n".join("  " + line for line in body.splitlines()),
+    )
+    return True
 
 
 def send_verification_email(to: str, name: str, token: str) -> bool:
