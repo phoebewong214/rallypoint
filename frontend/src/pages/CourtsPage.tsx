@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { TopNav, Icon } from "../rally-shared";
 import { useToast } from "../contexts/ToastContext";
+import { useCourts } from "../hooks/useCourts";
 
 /* ---- Real Chicago courts with verified lat/lng ----
    Distances are rough straight-line miles from "Phoebe's home" pin (Loop). */
@@ -25,6 +26,7 @@ const COURTS = [
     activity: { state: "busy", pct: 80, label: "5 of 6 courts in use" },
     nextSlot: "Today, 4:30 PM",
     fav: true,
+    image: "/courts/lincoln-park.jpg",
   },
   {
     id: "grant-park",
@@ -41,6 +43,7 @@ const COURTS = [
     activity: { state: "open", pct: 35, label: "8 of 12 open now" },
     nextSlot: "Today, 2:00 PM",
     fav: false,
+    image: "/courts/grant-park.jpg",
   },
   {
     id: "maggie-daley",
@@ -57,6 +60,7 @@ const COURTS = [
     activity: { state: "open", pct: 25, label: "3 of 4 open now" },
     nextSlot: "Today, 3:00 PM",
     fav: true,
+    image: "/courts/maggie-daley.jpg",
   },
   {
     id: "wicker-park",
@@ -73,6 +77,7 @@ const COURTS = [
     activity: { state: "quiet", pct: 10, label: "Mostly empty" },
     nextSlot: "Today, 12:00 PM",
     fav: false,
+    image: "/courts/wicker-park.jpg",
   },
   {
     id: "welles-park",
@@ -89,6 +94,7 @@ const COURTS = [
     activity: { state: "open", pct: 50, label: "4 of 8 open now" },
     nextSlot: "Today, 5:00 PM",
     fav: false,
+    image: "/courts/welles-park.jpg",
   },
   {
     id: "lake-shore-park",
@@ -105,6 +111,7 @@ const COURTS = [
     activity: { state: "busy", pct: 100, label: "All courts booked" },
     nextSlot: "Tomorrow, 7:00 AM",
     fav: false,
+    image: "/courts/lake-shore-park.jpg",
   },
   {
     id: "smith-park",
@@ -121,6 +128,7 @@ const COURTS = [
     activity: { state: "open", pct: 50, label: "2 of 4 open now" },
     nextSlot: "Today, 6:00 PM",
     fav: false,
+    image: "/courts/smith-park.jpg",
   },
   {
     id: "mcguane-park",
@@ -137,6 +145,7 @@ const COURTS = [
     activity: { state: "open", pct: 50, label: "2 of 4 open now" },
     nextSlot: "Today, 4:00 PM",
     fav: false,
+    image: "/courts/mcguane-park.jpg",
   },
 ];
 
@@ -150,9 +159,18 @@ function CourtCard({ c, active, onHover, onLeave, onClick, onDirections, onBook 
       onClick={onClick}
     >
       <div className="court-hero">
-        <div className={"court-svg " + c.primary}>
-          <div className="court-lines" />
-        </div>
+        {c.image ? (
+          <div
+            className="court-hero-image"
+            style={{ backgroundImage: `url(${c.image})` }}
+            role="img"
+            aria-label={c.name}
+          />
+        ) : (
+          <div className={"court-svg " + c.primary}>
+            <div className="court-lines" />
+          </div>
+        )}
         <div className="hero-badges">
           {c.activity.state === "busy" && (
             <span className="hero-badge live">
@@ -166,7 +184,6 @@ function CourtCard({ c, active, onHover, onLeave, onClick, onDirections, onBook 
           )}
           {c.sports.map((s) => (
             <span key={s} className="hero-badge">
-              <Icon name={s === "Tennis" ? "tennis" : "paddle"} size={11} stroke={2.4} />
               {s}
             </span>
           ))}
@@ -285,15 +302,49 @@ function CourtsPage() {
   const [query, setQuery] = useState("");
   const [maxMiles, setMaxMiles] = useState(5);
 
+  /* Real data from /api/courts. Falls back to the local COURTS demo array
+     when the backend is unreachable (same pattern as FindPartnerPage). */
+  const { data: apiData, isError: apiError } = useCourts(
+    sport !== "any"
+      ? { sport: (sport === "tennis" ? "Tennis" : "Pickleball") as any }
+      : {}
+  );
+
+  /* Merge API "truth" (id/name/addr/lat/lng/courts/surface) with local
+     "extras" (activity, nextSlot, fav, image, walk, distance) by id.
+     In production the extras would come from real-time sensors + a user-
+     specific favorites table — for now they live as static demo data. */
+  const courts = useMemo(() => {
+    if (!apiData?.courts?.length) return COURTS;
+    const extras = new Map(COURTS.map((c) => [c.id, c]));
+    return apiData.courts.map((api) => {
+      const extra = extras.get(api.id);
+      return {
+        ...(extra ?? {} as any),
+        id: api.id,
+        name: api.name,
+        addr: api.addr,
+        lat: api.lat,
+        lng: api.lng,
+        primary: api.primary,
+        sports: api.sports,
+        courtCount: api.courtCount,
+        surface: api.surface,
+        lights: api.lights,
+      };
+    });
+  }, [apiData]);
+  const dataSource: "live" | "demo" = apiData?.courts?.length ? "live" : "demo";
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return COURTS.filter((c) => {
-      if (sport !== "any" && !c.sports.map((s) => s.toLowerCase()).includes(sport)) return false;
-      if (parseFloat(c.distance) > maxMiles) return false;
+    return courts.filter((c: any) => {
+      if (sport !== "any" && !c.sports.map((s: string) => s.toLowerCase()).includes(sport)) return false;
+      if (c.distance && parseFloat(c.distance) > maxMiles) return false;
       if (q && !(c.name.toLowerCase().includes(q) || c.addr.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [sport, query, maxMiles]);
+  }, [courts, sport, query, maxMiles]);
 
   return (
     <>
@@ -302,7 +353,13 @@ function CourtsPage() {
       <main className="page">
         <header className="page-head">
           <div>
-            <div className="eyebrow"><span className="dot" /> {filtered.length} courts within {maxMiles} mi</div>
+            <div className="eyebrow">
+              <span className="dot" />
+              {dataSource === "live"
+                ? `Live · ${filtered.length} courts from backend`
+                : `Demo · ${filtered.length} courts within ${maxMiles} mi`}
+              {apiError && " · backend offline"}
+            </div>
             <h1 className="h1">Courts <em>near you.</em></h1>
             <p className="sub">
               Live activity, court counts, and open slots — book your spot in two taps.
