@@ -117,10 +117,12 @@ def score_and_reason(viewer: "User", cand: "User", sport: str) -> tuple[int, str
     if cp.availability_summary:
         bits.append(f"plays {cp.availability_summary.lower()}")
 
+    parts = (cand.name or "").split()
+    first_name = parts[0] if parts else "This player"
     if not bits:
-        reason = f"{cand.name.split()[0]} plays {sport} at {label} {cp.ntrp} — give it a try."
+        reason = f"{first_name} plays {sport} at {label} {cp.ntrp} — give it a try."
     else:
-        reason = f"{cand.name.split()[0]} fits because: {', '.join(bits)}."
+        reason = f"{first_name} fits because: {', '.join(bits)}."
     return score, reason, distance
 
 

@@ -225,6 +225,26 @@ def test_reset_password_updates_pw_revokes_sessions_and_is_single_use(client, ap
     assert reuse.status_code == 400
 
 
+def test_signup_creates_a_sport_profile_from_chosen_sport_and_ntrp(client):
+    body = client.post(
+        "/api/auth/signup",
+        json={"email": "prof@rally.app", "password": "rally1234", "name": "Prof",
+              "sport": "Tennis", "ntrp": "4.0"},
+    ).get_json()
+    profiles = body["user"]["sportProfiles"]
+    assert len(profiles) == 1
+    assert profiles[0]["sport"] == "Tennis" and profiles[0]["ntrp"] == "4.0"
+
+
+def test_signup_rejects_whitespace_only_name(client):
+    rsp = client.post(
+        "/api/auth/signup",
+        json={"email": "blank@rally.app", "password": "rally1234", "name": "   "},
+    )
+    assert rsp.status_code == 422
+    assert "name" in rsp.get_json()["fields"]
+
+
 def _set_cookie_value(rsp, name):
     for h in rsp.headers.get_all("Set-Cookie"):
         if h.startswith(name + "="):

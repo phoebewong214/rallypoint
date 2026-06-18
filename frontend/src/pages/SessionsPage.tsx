@@ -153,7 +153,7 @@ function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
       </div>
 
       <div className="sess-right">
-        {s.status === "completed" ? (
+        {s.status === "completed" && s.result ? (
           <div className="result-line">
             <span className={"result-tag " + s.result.toLowerCase()}>{s.result}</span>
             {s.score}

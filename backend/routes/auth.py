@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
-from models import User
+from models import User, SportProfile
 from schemas import (
     LoginSchema,
     SignupSchema,
@@ -111,6 +111,9 @@ def signup():
         lng=data.lng,
     )
     user.set_password(data.password)
+    # Seed the profile for their chosen sport so they show up in matching and
+    # their NTRP isn't discarded. Cascades with the user on commit.
+    user.sport_profiles.append(SportProfile(sport=data.sport, ntrp=data.ntrp))
     db.session.add(user)
     try:
         db.session.commit()

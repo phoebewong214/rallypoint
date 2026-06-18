@@ -22,6 +22,14 @@ class SignupSchema(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
 
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name cannot be blank")
+        return v
+
     @field_validator("ntrp")
     @classmethod
     def ntrp_must_be_valid(cls, v: str) -> str:

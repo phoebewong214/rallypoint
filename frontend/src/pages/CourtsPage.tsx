@@ -320,6 +320,14 @@ function CourtsPage() {
     return apiData.courts.map((api) => {
       const extra = extras.get(api.id);
       return {
+        // Defaults so a backend court with no local "extra" still renders
+        // (otherwise c.activity.state would throw). Real-time data overrides these.
+        activity: { state: "quiet", pct: 0, label: "Live data unavailable" },
+        distance: "—",
+        walk: "",
+        nextSlot: null,
+        fav: false,
+        image: null,
         ...(extra ?? {} as any),
         id: api.id,
         name: api.name,
