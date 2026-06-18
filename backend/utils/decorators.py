@@ -21,12 +21,16 @@ def require_auth(fn):
         if not token:
             return jsonify({"error": "missing Authorization: Bearer header"}), 401
         try:
-            user_id = decode_token(token)
+            claims = decode_token(token)
         except TokenError as e:
             return jsonify({"error": str(e)}), 401
-        user = User.query.get(user_id)
+        user = User.query.get(claims.user_id)
         if not user:
             return jsonify({"error": "user no longer exists"}), 401
+        # Reject tokens issued before the user's tokens were last revoked
+        # (logout-all / password change / pre-versioning tokens).
+        if claims.token_version != user.token_version:
+            return jsonify({"error": "session expired, please sign in again"}), 401
         g.current_user = user
         return fn(*args, **kwargs)
 
