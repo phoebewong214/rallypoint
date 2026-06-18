@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
@@ -425,13 +426,24 @@ function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    sport: Sport;
+    ntrp: [number, number];
+    time: string;
+  }>({
     sport: "Pickleball",
     ntrp: [3.0, 4.0],
     time: "Any time",
   });
-  const myRatingLabel = ratingLabel(authUser?.primarySport ?? filters.sport);
-  const myRating = authUser?.ntrp ?? "3.5";
+  const myRatingLabel = ratingLabel(filters.sport);
+  // Real NTRP/DUPR for the selected sport, read from the user's sport profiles
+  // (the /me payload includes sportProfiles); "—" when they have none yet.
+  const myProfiles = (authUser as any)?.sportProfiles as
+    | { sport?: string; ntrp?: string }[]
+    | undefined;
+  const myRating =
+    myProfiles?.find((p) => (p.sport || "").toLowerCase() === filters.sport.toLowerCase())?.ntrp ??
+    "—";
   const [requested, setRequested] = useState(new Set());
   const [saved, setSaved] = useState(new Set());
   const [sort, setSort] = useState("match");
@@ -448,7 +460,11 @@ function FindPartnerPage() {
     ntrpMin: filters.ntrp[0],
     ntrpMax: filters.ntrp[1],
   });
-  const liveMatches = apiData?.players?.length ? apiData.players : null;
+  // `liveMatches` is the array the backend returned — which may be EMPTY (a
+  // real "no matches" answer). It's null only when the backend never responded
+  // (loading or unreachable). We must NOT treat an empty live result as "demo",
+  // or real users with no matches would see fabricated players.
+  const liveMatches = apiData ? apiData.players : null;
   const dataSource: "live" | "demo" = liveMatches ? "live" : "demo";
 
   const visiblePlayers = useMemo(() => {
@@ -573,22 +589,17 @@ function FindPartnerPage() {
             </div>
             <h1 className="h1">Find your next <em>rally partner.</em></h1>
             <p className="sub">
-              Matched on skill, schedule, and court proximity across Chicago. Powered by your play history.
+              Matched on skill, schedule, and court proximity across Chicago.
             </p>
           </div>
           <div className="stats">
-            <div className="stat">
-              <div className="n">12</div>
-              <div className="l">Matches Played</div>
-            </div>
-            <div className="stat-divider" />
             <div className="stat">
               <div className="n">{myRating}</div>
               <div className="l">Your {myRatingLabel}</div>
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">8</div>
+              <div className="n">{saved.size}</div>
               <div className="l">Saved</div>
             </div>
           </div>
@@ -626,20 +637,46 @@ function FindPartnerPage() {
           </div>
         </div>
 
-        <div className="grid">
-          {apiLoading && !liveMatches
-            ? Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)
-            : visiblePlayers.map((p) => (
-                <PlayerCard
-                  key={p.id}
-                  player={p}
-                  requested={requested.has(p.id)}
-                  saved={saved.has(p.id)}
-                  onRequest={handleRequest}
-                  onSave={toggle(saved, setSaved)}
-                />
-              ))}
-        </div>
+        {apiLoading && !liveMatches ? (
+          <div className="grid">
+            {Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)}
+          </div>
+        ) : dataSource === "live" && visiblePlayers.length === 0 ? (
+          <div
+            role="status"
+            style={{ textAlign: "center", padding: "64px 24px", maxWidth: 440, margin: "0 auto" }}
+          >
+            <div
+              style={{
+                width: 56, height: 56, borderRadius: "50%", margin: "0 auto 18px",
+                display: "grid", placeItems: "center",
+                background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)",
+              }}
+            >
+              <Icon name="search" size={24} />
+            </div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>
+              No partners match these filters yet
+            </h3>
+            <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+              Try widening your skill range or switching sport. More players are joining
+              RallyPoint across Chicago every week — check back soon.
+            </p>
+          </div>
+        ) : (
+          <div className="grid">
+            {visiblePlayers.map((p) => (
+              <PlayerCard
+                key={p.id}
+                player={p}
+                requested={requested.has(p.id)}
+                saved={saved.has(p.id)}
+                onRequest={handleRequest}
+                onSave={toggle(saved, setSaved)}
+              />
+            ))}
+          </div>
+        )}
       </main>
     </>
   );
