@@ -48,6 +48,10 @@ def _send_via_resend_api(to: str, subject: str, body: str) -> bool:
         headers={
             "Authorization": f"Bearer {_resend_api_key()}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            # Cloudflare (fronting api.resend.com) blocks the default
+            # "Python-urllib/x.y" UA with error 1010 — send a real one.
+            "User-Agent": "RallyPoint/1.0 (+https://tryrallypoint.com)",
         },
     )
     try:
