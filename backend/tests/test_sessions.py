@@ -90,3 +90,40 @@ def test_cancel_requires_being_a_participant(client):
     _c_id, c = _signup(client, "stranger@rally.app")
     sid = _request(client, a, b_id)
     assert client.post(f"/api/sessions/{sid}/cancel", headers=c).status_code == 403
+
+
+def _confirmed(client):
+    a_id, a = _signup(client, f"ha{id(client)}@rally.app")
+    b_id, b = _signup(client, f"gb{id(client)}@rally.app")
+    sid = _request(client, a, b_id)
+    client.post(f"/api/sessions/{sid}/accept", headers=b)
+    return sid, a, b
+
+
+def test_complete_casual_has_no_result(client):
+    sid, a, b = _confirmed(client)
+    rsp = client.post(f"/api/sessions/{sid}/complete", headers=a, json={})
+    assert rsp.status_code == 200
+    s = rsp.get_json()["session"]
+    assert s["status"] == "completed" and s["bucket"] == "past" and s["result"] is None
+
+
+def test_complete_with_outcome_is_viewer_relative(client):
+    sid, a, b = _confirmed(client)
+    # A reports a win, with a score.
+    rsp = client.post(
+        f"/api/sessions/{sid}/complete", headers=a,
+        json={"outcome": "won", "score": "11-7, 11-9"},
+    )
+    assert rsp.status_code == 200
+    assert rsp.get_json()["session"]["result"] == "W"  # A's perspective
+    # B sees the same game as a loss.
+    b_view = [x for x in _list(client, b) if x["id"] == sid][0]
+    assert b_view["result"] == "L" and b_view["score"] == "11-7, 11-9"
+
+
+def test_only_confirmed_can_be_completed(client):
+    a_id, a = _signup(client, "hc@rally.app")
+    b_id, b = _signup(client, "gc@rally.app")
+    sid = _request(client, a, b_id)  # still pending, not accepted
+    assert client.post(f"/api/sessions/{sid}/complete", headers=a, json={}).status_code == 409

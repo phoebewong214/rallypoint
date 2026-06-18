@@ -497,6 +497,15 @@ function FindPartnerPage() {
   const [saved, setSaved] = useState(new Set());
   const [sort, setSort] = useState("match");
 
+  // Dismissible "how it works" strip for first-time users.
+  const [showGuide, setShowGuide] = useState(() => {
+    try { return localStorage.getItem("rallypoint.guide.find") !== "1"; } catch { return true; }
+  });
+  const dismissGuide = () => {
+    try { localStorage.setItem("rallypoint.guide.find", "1"); } catch { /* ignore */ }
+    setShowGuide(false);
+  };
+
   // Real activity stats from the user's sessions.
   const { data: sessionsData } = useSessions();
   const sessions = sessionsData?.sessions ?? [];
@@ -653,6 +662,30 @@ function FindPartnerPage() {
             </div>
           </div>
         </header>
+
+        {showGuide && (
+          <div
+            role="note"
+            style={{
+              display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+              padding: "12px 16px", marginBottom: 16, fontSize: 13,
+              background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 12,
+            }}
+          >
+            <strong style={{ fontWeight: 700 }}>How it works</strong>
+            <span><b style={{ color: "var(--green)" }}>1</b> Set filters → Find Partners</span>
+            <span style={{ color: "var(--text-dim)" }}>→</span>
+            <span><b style={{ color: "var(--green)" }}>2</b> Request a game &amp; pick a time</span>
+            <span style={{ color: "var(--text-dim)" }}>→</span>
+            <span><b style={{ color: "var(--green)" }}>3</b> They accept — track it under My Matches</span>
+            <button
+              type="button" aria-label="Dismiss" onClick={dismissGuide}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", fontSize: 18, lineHeight: 1, padding: 4 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         <FilterBar
           filters={filters}

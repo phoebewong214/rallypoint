@@ -6,7 +6,7 @@ from sqlalchemy import or_
 
 from extensions import db
 from models import Session, SessionStatus, User
-from schemas import CreateSessionSchema, RescheduleSessionSchema
+from schemas import CreateSessionSchema, RescheduleSessionSchema, CompleteSessionSchema
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -127,5 +127,30 @@ def reschedule(sid):
     if data.note is not None:
         s.note = data.note
     s.status = SessionStatus.PENDING.value
+    db.session.commit()
+    return jsonify({"session": s.to_dict(viewer.id)})
+
+
+@sessions_bp.post("/<int:sid>/complete")
+@require_auth
+def complete(sid):
+    """Mark a confirmed game as played. Outcome + score are optional — a casual
+    game can be logged with neither."""
+    viewer = current_user()
+    s = Session.query.get_or_404(sid)
+    err = _participant_or_403(s, viewer)
+    if err:
+        return err
+    if s.status != SessionStatus.CONFIRMED.value:
+        return jsonify({"error": "only a confirmed game can be marked played"}), 409
+    data = parse_json(CompleteSessionSchema)
+    s.status = SessionStatus.COMPLETED.value
+    s.score = data.score
+    if data.outcome is None:
+        s.result = None  # casual game, no win/loss recorded
+    else:
+        caller_won = data.outcome == "won"
+        host_won = caller_won if viewer.id == s.host_id else not caller_won
+        s.result = "W" if host_won else "L"  # stored from the host's perspective
     db.session.commit()
     return jsonify({"session": s.to_dict(viewer.id)})

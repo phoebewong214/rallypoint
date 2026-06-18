@@ -4,7 +4,7 @@ import type { IconName } from "../types";
 import { TopNav, Icon, Avatar } from "../rally-shared";
 import {
   useSessions, useAcceptSession, useDeclineSession,
-  useCancelSession, useRescheduleSession,
+  useCancelSession, useRescheduleSession, useCompleteSession,
 } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
 import { ScheduleModal } from "../components/ScheduleModal";
@@ -105,12 +105,13 @@ const StatusPill = ({ status, sentByMe }) => {
   );
 };
 
-function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onSoon, busy }: {
+function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onComplete, onSoon, busy }: {
   s: any;
   onAccept: (id: number) => void;
   onDecline: (id: number) => void;
   onCancel: (id: number) => void;
   onReschedule: (s: any) => void;
+  onComplete: (s: any) => void;
   onSoon: (feature: string) => void;
   busy?: boolean;
 }) {
@@ -173,8 +174,8 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onSoon, bu
         <div className="sess-actions">
           {s.status === "confirmed" && (
             <>
-              <button className="btn-sm primary" type="button" onClick={() => onSoon("Messaging")}>
-                <Icon name="message" size={14} stroke={2.4} /> Message
+              <button className="btn-sm primary" type="button" onClick={() => onComplete(s)}>
+                <Icon name="check" size={14} stroke={2.5} /> Mark as played
               </button>
               <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
               <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
@@ -215,6 +216,70 @@ const TABS = [
   { id: "past",     label: "Past",      icon: "trophy" },
 ];
 
+// Tab-specific empty-state copy so an empty tab tells the user what belongs here.
+const EMPTY_COPY: Record<string, { title: string; sub: string }> = {
+  upcoming: { title: "No games scheduled", sub: "Find a partner and send a request to set one up." },
+  requests: { title: "No pending requests", sub: "When someone invites you, accept or propose a new time here." },
+  past:     { title: "No past games yet", sub: "Games you mark as played show up here." },
+};
+
+/* "Mark as played" — outcome and score are optional so a casual hit can be
+   logged with neither. */
+function CompleteModal({ opp, busy, onSubmit, onClose }: {
+  opp: string | null;
+  busy?: boolean;
+  onSubmit: (outcome: "won" | "lost" | undefined, score?: string) => void;
+  onClose: () => void;
+}) {
+  const [outcome, setOutcome] = useState<"won" | "lost" | "casual">("casual");
+  const [score, setScore] = useState("");
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(outcome === "casual" ? undefined : outcome, score.trim() || undefined);
+  };
+  const opts: [typeof outcome, string][] = [
+    ["won", "I won"], ["lost", "I lost"], ["casual", "Just for fun"],
+  ];
+  return (
+    <div
+      role="dialog" aria-modal="true" aria-label="Mark as played" onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16 }}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()} onSubmit={submit}
+        style={{ width: "100%", maxWidth: 420, background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>How did it go?</h3>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-dim)" }}>vs {opp ?? "your partner"}</p>
+        </div>
+        <div className="pill-group" role="radiogroup" aria-label="Result">
+          {opts.map(([k, label]) => (
+            <button
+              key={k} type="button" role="radio" aria-checked={outcome === k}
+              className={"pill" + (outcome === k ? " active" : "")}
+              onClick={() => setOutcome(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="score">Score (optional)</label>
+          <input id="score" className="input" value={score} maxLength={80}
+            placeholder="e.g. 11-7, 11-9" onChange={(e) => setScore(e.target.value)} />
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={busy} style={{ flex: 1, opacity: busy ? 0.7 : 1 }}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function SessionsPage() {
   const [tab, setTab] = useState("upcoming");
   const { show, soon } = useToast();
@@ -231,9 +296,11 @@ function SessionsPage() {
   const decline = useDeclineSession();
   const cancel = useCancelSession();
   const reschedule = useRescheduleSession();
+  const complete = useCompleteSession();
 
-  // The session being rescheduled (opens the modal), if any.
+  // The session being rescheduled / marked-played (each opens its modal).
   const [reschedTarget, setReschedTarget] = useState<any | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<any | null>(null);
 
   const handleAccept = (id: number) => {
     accept.mutate(id, {
@@ -263,6 +330,19 @@ function SessionsPage() {
           show("New time proposed — waiting on them to confirm", "success");
         },
         onError: () => show("Couldn't reschedule — try again", "error"),
+      },
+    );
+  };
+  const handleComplete = (outcome: "won" | "lost" | undefined, score?: string) => {
+    if (!completeTarget) return;
+    complete.mutate(
+      { id: completeTarget.id, outcome, score },
+      {
+        onSuccess: () => {
+          setCompleteTarget(null);
+          show("Logged — nice game!", "success");
+        },
+        onError: () => show("Couldn't save — try again", "error"),
       },
     );
   };
@@ -385,11 +465,13 @@ function SessionsPage() {
           {visible.length === 0 ? (
             <div className="empty">
               <div className="ico-wrap"><Icon name="calendar" size={24} /></div>
-              <h3 className="empty-title">Nothing here yet</h3>
-              <p className="empty-sub">When you book a game, it'll show up right here.</p>
-              <Link className="btn-primary" to="/find">
-                <Icon name="search" size={15} stroke={2.4} /> Find a Partner
-              </Link>
+              <h3 className="empty-title">{EMPTY_COPY[tab]?.title ?? "Nothing here yet"}</h3>
+              <p className="empty-sub">{EMPTY_COPY[tab]?.sub ?? "When you book a game, it'll show up right here."}</p>
+              {tab !== "requests" && (
+                <Link className="btn-primary" to="/find">
+                  <Icon name="search" size={15} stroke={2.4} /> Find a Partner
+                </Link>
+              )}
             </div>
           ) : (
             visible.map((s: any) => (
@@ -400,6 +482,7 @@ function SessionsPage() {
                 onDecline={handleDecline}
                 onCancel={handleCancel}
                 onReschedule={setReschedTarget}
+                onComplete={setCompleteTarget}
                 onSoon={soon}
                 busy={busyId === s.id}
               />
@@ -417,6 +500,15 @@ function SessionsPage() {
           busy={reschedule.isPending}
           onSubmit={handleReschedule}
           onClose={() => setReschedTarget(null)}
+        />
+      )}
+
+      {completeTarget && (
+        <CompleteModal
+          opp={completeTarget.opp}
+          busy={complete.isPending}
+          onSubmit={handleComplete}
+          onClose={() => setCompleteTarget(null)}
         />
       )}
     </>
