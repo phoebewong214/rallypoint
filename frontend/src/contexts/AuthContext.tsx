@@ -1,9 +1,7 @@
 /* ============================================================
-   AuthContext — single source of truth for the logged-in user.
-   The JWT lives in an httpOnly cookie the browser sends automatically, so JS
-   never holds it. We cache only the (non-secret) user object for instant first
-   paint, then validate the session against /api/auth/me on mount; if the cookie
-   is missing/stale we silently log out.
+   AuthContext — single source of truth for the logged-in user + JWT.
+   On mount we restore the cached user and validate the token against
+   /api/auth/me; if it's stale we silently log out.
    ============================================================ */
 import React, {
   createContext,
@@ -15,6 +13,7 @@ import React, {
 } from "react";
 import type { User } from "../types";
 import { authApi } from "../api/auth";
+import { TOKEN_STORAGE_KEY } from "../api/client";
 
 const USER_STORAGE_KEY = "rallypoint.user";
 
@@ -25,8 +24,6 @@ export interface AuthState {
   login: (email: string, password: string) => Promise<User>;
   signup: (data: SignupInput) => Promise<User>;
   logout: () => void;
-  logoutEverywhere: () => Promise<void>;
-  refreshUser: () => Promise<User | null>;
   updateProfile: (patch: ProfilePatch) => Promise<User>;
 }
 
@@ -43,9 +40,6 @@ export interface SignupInput {
   password: string;
   sport: "Tennis" | "Pickleball";
   ntrp: string;
-  location?: string;
-  lat?: number;
-  lng?: number;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -63,41 +57,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(readCachedUser);
   const [isLoading, setIsLoading] = useState(true);
 
-  /* Cache only the user object (no secret). The auth cookie is managed by the
-     server. Passing null clears the cache. */
-  const persist = useCallback((u: User | null) => {
-    if (u) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u));
-    else localStorage.removeItem(USER_STORAGE_KEY);
+  const persist = useCallback((u: User | null, token: string | null) => {
+    if (u && token) {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u));
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
     setUser(u);
   }, []);
 
-  /* Clear the local cache and tell the server to expire the cookie. We clear
-     locally regardless of the API outcome so the user is always logged out. */
-  const logout = useCallback(() => {
-    persist(null);
-    authApi.logout().catch(() => {});
-  }, [persist]);
+  const logout = useCallback(() => persist(null, null), [persist]);
 
-  /* Revoke all sessions server-side, then clear locally. */
-  const logoutEverywhere = useCallback(async () => {
-    try {
-      await authApi.logoutAll();
-    } finally {
-      persist(null);
-    }
-  }, [persist]);
-
-  /* On mount: validate the session cookie via /me, hydrating the user (or
-     clearing a stale cache if the cookie is gone). */
+  /* On mount: if we have a token, validate it via /me. */
   useEffect(() => {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
     let cancelled = false;
     authApi
       .me()
       .then(({ user: fresh }) => {
-        if (!cancelled) persist(fresh);
+        if (!cancelled) {
+          // refresh cached user with the latest server-side data
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(fresh));
+          setUser(fresh);
+        }
       })
       .catch(() => {
-        if (!cancelled) persist(null);
+        if (!cancelled) logout();
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -105,14 +96,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       cancelled = true;
     };
-  }, [persist]);
+  }, [logout]);
 
-  /* Global 401 handling (api/client dispatches 'auth:expired') + cross-tab
-     logout. On 401 we only clear local state — the cookie is already gone. */
+  /* Cross-tab + global 401 handling: api/client dispatches 'auth:expired'. */
   useEffect(() => {
-    const onExpired = () => persist(null);
+    const onExpired = () => logout();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === USER_STORAGE_KEY && e.newValue === null) {
+      if (e.key === TOKEN_STORAGE_KEY && e.newValue === null) {
         setUser(null);
       }
     };
@@ -122,12 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener("auth:expired", onExpired);
       window.removeEventListener("storage", onStorage);
     };
-  }, [persist]);
+  }, [logout]);
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const { user: u } = await authApi.login({ email, password });
-      persist(u);
+      const { user: u, token } = await authApi.login({ email, password });
+      persist(u, token);
       return u;
     },
     [persist]
@@ -135,25 +125,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signup = useCallback(
     async (data: SignupInput) => {
-      const { user: u } = await authApi.signup(data);
-      persist(u);
+      const { user: u, token } = await authApi.signup(data);
+      persist(u, token);
       return u;
     },
     [persist]
   );
-
-  /* Re-pull the current user from the server (e.g. after email verification
-     flips emailVerified). Clears local state if the session is gone. */
-  const refreshUser = useCallback(async () => {
-    try {
-      const { user: fresh } = await authApi.me();
-      persist(fresh);
-      return fresh;
-    } catch {
-      persist(null);
-      return null;
-    }
-  }, [persist]);
 
   const updateProfile = useCallback(async (patch: ProfilePatch) => {
     const { user: fresh } = await authApi.updateMe(patch);
@@ -170,11 +147,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login,
       signup,
       logout,
-      logoutEverywhere,
-      refreshUser,
       updateProfile,
     }),
-    [user, isLoading, login, signup, logout, logoutEverywhere, refreshUser, updateProfile]
+    [user, isLoading, login, signup, logout, updateProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

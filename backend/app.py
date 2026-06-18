@@ -60,12 +60,7 @@ def create_app(config_class: type = Config) -> Flask:
 
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(
-        app,
-        origins=app.config["CORS_ORIGINS"],
-        supports_credentials=True,
-        allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
-    )
+    CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=True)
     limiter.init_app(app)
     Swagger(app, template=SWAGGER_TEMPLATE, config=SWAGGER_CONFIG)
 

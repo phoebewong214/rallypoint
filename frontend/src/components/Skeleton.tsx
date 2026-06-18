@@ -26,17 +26,6 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   />
 );
 
-/* Inline spinner — used in submit buttons during async actions.
-   Renders as a 14px circle that spins; inherits currentColor. */
-export const Spinner: React.FC<{ size?: number }> = ({ size = 14 }) => (
-  <span
-    className="spinner-ring"
-    role="status"
-    aria-label="Loading"
-    style={{ width: size, height: size }}
-  />
-);
-
 /* Player card-shaped skeleton — matches the FindPartner card geometry */
 export const PlayerCardSkeleton: React.FC = () => (
   <div className="skeleton-card" aria-busy="true" aria-label="Loading player">

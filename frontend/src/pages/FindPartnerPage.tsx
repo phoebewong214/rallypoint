@@ -1,10 +1,9 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import { TopNav, Icon, ratingLabel } from "../rally-shared";
+import { TopNav, Icon } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useCreateSession } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
-import { useAuth } from "../contexts/AuthContext";
 
 const C = {
   green:  ["linear-gradient(135deg, #00E07A, #00B864)", "#062414"],
@@ -29,7 +28,7 @@ const mk = (id, name, initials, palette, location, distance, online, sports) => 
 const PLAYERS = [
   mk(1, "Maya Patel", "MP", "green", "Lincoln Park", "0.8", true, [
     ["pickleball", "3.5", 96, "Weekends, mornings",
-      "Same DUPR and you both prefer weekend mornings at Lincoln Park courts."],
+      "Same NTRP and you both prefer weekend mornings at Lincoln Park courts."],
   ]),
   mk(2, "Jordan Williams", "JW", "blue", "Wicker Park", "2.3", true, [
     ["tennis", "4.0", 91, "Weekday evenings",
@@ -85,7 +84,7 @@ const PLAYERS = [
   ]),
   mk(14, "Yuki Tanaka", "YT", "teal", "Lakeview", "3.5", true, [
     ["pickleball", "3.5", 86, "Weekday evenings",
-      "Steady third-shot drops — same pickleball DUPR and evenings open."],
+      "Steady third-shot drops — same pickleball NTRP and evenings open."],
     ["tennis", "3.5", 85, "Weekday evenings",
       "Versatile partner across both sports — shared evening windows."],
   ]),
@@ -101,7 +100,7 @@ const PLAYERS = [
   ]),
   mk(17, "Emma O'Brien", "EO", "green", "Lincoln Square", "4.4", true, [
     ["pickleball", "3.5", 87, "Mornings",
-      "Reliable morning partner — same DUPR, prefers Welles Park courts."],
+      "Reliable morning partner — same NTRP, prefers Welles Park courts."],
   ]),
   mk(18, "Carlos Vega", "CV", "blue", "Pilsen", "2.9", false, [
     ["tennis", "3.0", 80, "Sunday afternoons",
@@ -167,7 +166,7 @@ const PLAYERS = [
   ]),
   mk(31, "Layla Hassan", "LH", "red", "Albany Park", "5.0", false, [
     ["pickleball", "3.5", 83, "Saturdays",
-      "Saturday-only player — same DUPR, dependable weekend rallies."],
+      "Saturday-only player — same NTRP, dependable weekend rallies."],
   ]),
   mk(32, "Vincent Nguyen", "VN", "amber", "Edgewater", "5.2", true, [
     ["tennis", "4.0", 85, "Sunday mornings",
@@ -193,7 +192,7 @@ const PLAYERS = [
   ]),
   mk(37, "Aaliyah Banks", "AB", "purple", "Kenwood", "5.4", true, [
     ["pickleball", "4.0", 84, "Saturday mornings",
-      "Solid south-side partner — same DUPR and consistent weekend slots."],
+      "Solid south-side partner — same NTRP and consistent weekend slots."],
   ]),
   mk(38, "Rafael Cruz", "RC", "teal", "Logan Square", "1.3", true, [
     ["pickleball", "4.5", 89, "Weeknights",
@@ -207,13 +206,13 @@ const PLAYERS = [
   ]),
   mk(40, "Omar Khalid", "OK", "amber", "Rogers Park", "6.0", true, [
     ["pickleball", "3.0", 79, "Sundays",
-      "Far north partner — same DUPR, dedicated Sunday player."],
+      "Far north partner — same NTRP, dedicated Sunday player."],
     ["tennis", "3.5", 82, "Sundays",
       "Versatile partner — also plays tennis at a similar level."],
   ]),
 ];
 
-function NTRPRange({ value, onChange, label }: { value: [number, number]; onChange: (v: [number, number]) => void; label: string }) {
+function NTRPRange({ value, onChange }) {
   const MIN = 2.0, MAX = 5.0, STEP = 0.5;
   const trackRef = useRef(null);
   const [drag, setDrag] = useState(null);
@@ -263,9 +262,9 @@ function NTRPRange({ value, onChange, label }: { value: [number, number]; onChan
         </div>
       </div>
       <div className="slider-values">
-        <span className="slider-value">{label} {value[0].toFixed(1)}</span>
+        <span className="slider-value">NTRP {value[0].toFixed(1)}</span>
         <span className="slider-meta">{((value[1] - value[0]) / STEP) + 1} levels</span>
-        <span className="slider-value">{label} {value[1].toFixed(1)}</span>
+        <span className="slider-value">NTRP {value[1].toFixed(1)}</span>
       </div>
     </div>
   );
@@ -284,13 +283,13 @@ function FilterBar({ filters, setFilters, onFind }) {
             className={"pill" + (filters.sport === "Pickleball" ? " active" : "")}
             onClick={() => setSport("Pickleball")}
           >
-            Pickleball
+            <Icon name="paddle" size={15} /> Pickleball
           </button>
           <button
             className={"pill" + (filters.sport === "Tennis" ? " active" : "")}
             onClick={() => setSport("Tennis")}
           >
-            Tennis
+            <Icon name="tennis" size={15} /> Tennis
           </button>
         </div>
       </div>
@@ -302,7 +301,6 @@ function FilterBar({ filters, setFilters, onFind }) {
         <NTRPRange
           value={filters.ntrp}
           onChange={(v) => setFilters((f) => ({ ...f, ntrp: v }))}
-          label={ratingLabel(filters.sport)}
         />
       </div>
 
@@ -344,11 +342,11 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
         <div className="name-wrap">
           <h3 className="name">{player.name}</h3>
           <div className="sub-row">
-            <span className="badge skill">{ratingLabel(player.sport)} {player.ntrp}</span>
+            <span className="badge skill">NTRP {player.ntrp}</span>
             <span className="badge sport">{player.sport}</span>
             {player.altSport && (
               <span className="badge sport" title={`Also plays ${player.altSport.sport}`}>
-                + {player.altSport.sport} {ratingLabel(player.altSport.sport)} {player.altSport.ntrp}
+                + {player.altSport.sport} {player.altSport.ntrp}
               </span>
             )}
           </div>
@@ -358,19 +356,9 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
       <div className="meta-list">
         <div className="meta-row">
           <Icon name="pin" size={16} />
-          {player.distance && player.distance !== "—" ? (
-            <>
-              <span className="dist">{player.distance} mi</span>
-              {player.location && (
-                <>
-                  <span style={{ color: "var(--text-low)" }}>·</span>
-                  <span>{player.location}</span>
-                </>
-              )}
-            </>
-          ) : (
-            <span>{player.location || "Distance unknown"}</span>
-          )}
+          <span className="dist">{player.distance} mi</span>
+          <span style={{ color: "var(--text-low)" }}>·</span>
+          <span>{player.location}</span>
         </div>
         <div className="meta-row">
           <Icon name="calendar" size={16} />
@@ -378,17 +366,12 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
         </div>
       </div>
 
-      <div
-        className="ai-box"
-        title="Score = rating closeness + same primary sport + proximity (≤2 mi) + availability overlap"
-      >
+      <div className="ai-box">
         <div className="ai-ico"><Icon name="sparkles" size={14} stroke={2.4} /></div>
         <div className="ai-content">
           <div className="ai-label">
             AI Match
-            <span className="ai-score" tabIndex={0}>
-              · {player.matchScore}% fit
-            </span>
+            <span className="ai-score">· {player.matchScore}% fit</span>
           </div>
           <p className="ai-text">{player.reason}</p>
         </div>
@@ -423,15 +406,12 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
 
 function FindPartnerPage() {
   const { show } = useToast();
-  const { user: authUser } = useAuth();
   const createSession = useCreateSession();
   const [filters, setFilters] = useState({
     sport: "Pickleball",
     ntrp: [3.0, 4.0],
     time: "Any time",
   });
-  const myRatingLabel = ratingLabel(authUser?.primarySport ?? filters.sport);
-  const myRating = authUser?.ntrp ?? "3.5";
   const [requested, setRequested] = useState(new Set());
   const [saved, setSaved] = useState(new Set());
   const [sort, setSort] = useState("match");
@@ -583,8 +563,8 @@ function FindPartnerPage() {
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{myRating}</div>
-              <div className="l">Your {myRatingLabel}</div>
+              <div className="n">3.5</div>
+              <div className="l">Your NTRP</div>
             </div>
             <div className="stat-divider" />
             <div className="stat">

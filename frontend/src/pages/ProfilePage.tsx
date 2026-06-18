@@ -1,8 +1,7 @@
 import React, { useState } from "react";
-import { TopNav, Icon, ratingLabel } from "../rally-shared";
+import { TopNav, Icon } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
-import { Spinner } from "../components/Skeleton";
 
 /* Bio + stats stay as placeholders until /api/users/me is wired up. */
 const PROFILE_EXTRAS = {
@@ -80,14 +79,14 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
                 className={"pill" + (form.primarySport === "Pickleball" ? " active" : "")}
                 onClick={() => set("primarySport")("Pickleball")}
               >
-                Pickleball
+                <Icon name="paddle" size={15} /> Pickleball
               </button>
               <button
                 type="button"
                 className={"pill" + (form.primarySport === "Tennis" ? " active" : "")}
                 onClick={() => set("primarySport")("Tennis")}
               >
-                Tennis
+                <Icon name="tennis" size={15} /> Tennis
               </button>
             </div>
           </div>
@@ -105,7 +104,7 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
         <div className="modal-foot">
           <button className="btn-ghost" type="button" onClick={onClose}>Cancel</button>
           <button className="btn-primary" type="button" onClick={handleSave} disabled={saving}>
-            {saving ? <><Spinner /> Saving…</> : "Save changes"}
+            {saving ? "Saving…" : "Save changes"}
           </button>
         </div>
       </div>
@@ -184,9 +183,9 @@ function ProfilePage() {
                 <span>Joined {USER.joined}</span>
               </div>
               <div className="hero-badges">
-                <span className="badge skill">{ratingLabel(USER.primarySport)} {USER.ntrp}</span>
-                <span className="badge">{USER.primarySport}</span>
-                <span className="badge sport">{USER.secondarySport}</span>
+                <span className="badge skill">NTRP {USER.ntrp}</span>
+                <span className="badge"><Icon name="paddle" size={11} /> {USER.primarySport}</span>
+                <span className="badge sport"><Icon name="tennis" size={11} /> {USER.secondarySport}</span>
                 <span className="badge blue"><Icon name="flame" size={11} /> {USER.stats.streak}-win streak</span>
               </div>
             </div>
@@ -293,14 +292,14 @@ function ProfilePage() {
               </div>
               <div className="info-list">
                 <div className="info-row">
-                  <span className="ico green"><Icon name="trophy" size={16} /></span>
+                  <span className="ico green"><Icon name="paddle" size={16} /></span>
                   <div>
                     <div className="label">Primary Sport</div>
                     <div className="value">{USER.primarySport}</div>
                   </div>
                 </div>
                 <div className="info-row">
-                  <span className="ico"><Icon name="sparkles" size={16} /></span>
+                  <span className="ico"><Icon name="tennis" size={16} /></span>
                   <div>
                     <div className="label">Also plays</div>
                     <div className="value">{USER.secondarySport}</div>
@@ -310,7 +309,7 @@ function ProfilePage() {
                   <span className="ico green"><Icon name="bolt" size={16} /></span>
                   <div>
                     <div className="label">Skill Level</div>
-                    <div className="value value-mono">{ratingLabel(USER.primarySport)} {USER.ntrp}</div>
+                    <div className="value value-mono">NTRP {USER.ntrp}</div>
                   </div>
                 </div>
                 <div className="info-row">

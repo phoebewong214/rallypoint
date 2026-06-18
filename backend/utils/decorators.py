@@ -8,47 +8,25 @@ Usage:
         ...
 """
 from functools import wraps
-from flask import request, jsonify, g, current_app
+from flask import request, jsonify, g
 
 from models import User
 from services.auth import decode_token, extract_bearer, TokenError
-
-SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def require_auth(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        cfg = current_app.config
-        # API/test clients send an explicit Bearer header (not auto-sent by the
-        # browser, so immune to CSRF). The browser flow uses the httpOnly cookie.
         token = extract_bearer(request.headers.get("Authorization"))
-        via_cookie = False
         if not token:
-            token = request.cookies.get(cfg["AUTH_COOKIE_NAME"])
-            via_cookie = token is not None
-        if not token:
-            return jsonify({"error": "authentication required"}), 401
-
-        # CSRF: only cookie-authenticated unsafe requests are at risk (Bearer
-        # tokens aren't auto-sent by the browser). Double-submit check.
-        if via_cookie and request.method not in SAFE_METHODS:
-            header_csrf = request.headers.get("X-CSRF-Token")
-            cookie_csrf = request.cookies.get(cfg["CSRF_COOKIE_NAME"])
-            if not header_csrf or not cookie_csrf or header_csrf != cookie_csrf:
-                return jsonify({"error": "CSRF check failed"}), 403
-
+            return jsonify({"error": "missing Authorization: Bearer header"}), 401
         try:
-            claims = decode_token(token)
+            user_id = decode_token(token)
         except TokenError as e:
             return jsonify({"error": str(e)}), 401
-        user = User.query.get(claims.user_id)
+        user = User.query.get(user_id)
         if not user:
             return jsonify({"error": "user no longer exists"}), 401
-        # Reject tokens issued before the user's tokens were last revoked
-        # (logout-all / password change / pre-versioning tokens).
-        if claims.token_version != user.token_version:
-            return jsonify({"error": "session expired, please sign in again"}), 401
         g.current_user = user
         return fn(*args, **kwargs)
 

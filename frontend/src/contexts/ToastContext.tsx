@@ -23,22 +23,12 @@ interface Toast {
 }
 
 interface ToastState {
-  /** Show a toast. `duration` in ms (default depends on kind). 0 = sticky. */
-  show: (message: string, kind?: ToastKind, duration?: number) => void;
+  show: (message: string, kind?: ToastKind) => void;
   /** convenience for the many "Coming soon" buttons */
   soon: (feature?: string) => void;
 }
 
 const ToastContext = createContext<ToastState | null>(null);
-
-/* Per-kind default durations. Errors get 8s so the user has time to read
-   them; everything else 3.2s. duration=0 means sticky (manual dismiss). */
-const DEFAULT_DURATIONS: Record<ToastKind, number> = {
-  info: 3200,
-  success: 3200,
-  error: 8000,
-  soon: 3200,
-};
 
 let nextId = 1;
 
@@ -50,11 +40,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const show = useCallback(
-    (message: string, kind: ToastKind = "info", duration?: number) => {
+    (message: string, kind: ToastKind = "info") => {
       const id = nextId++;
       setToasts((arr) => [...arr, { id, message, kind }]);
-      const d = duration ?? DEFAULT_DURATIONS[kind];
-      if (d > 0) setTimeout(() => remove(id), d);
+      setTimeout(() => remove(id), 3200);
     },
     [remove]
   );
@@ -73,16 +62,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
       <div className="toast-stack" role="region" aria-live="polite" aria-label="Notifications">
         {toasts.map((t) => (
-          <button
+          <div
             key={t.id}
-            type="button"
             className={"toast toast-" + t.kind}
             onClick={() => remove(t.id)}
-            aria-label="Dismiss notification"
           >
-            <span className="toast-msg">{t.message}</span>
-            <span className="toast-x" aria-hidden>×</span>
-          </button>
+            {t.message}
+          </div>
         ))}
       </div>
     </ToastContext.Provider>

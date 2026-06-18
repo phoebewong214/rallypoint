@@ -10,7 +10,7 @@ const SESSIONS = [
     id: 1, bucket: "upcoming", status: "confirmed",
     opp: "Maya Patel", oppHandle: "@mayap",
     sport: "Pickleball",
-    court: "Maggie Daley Park Tennis", courtMiles: "0.6",
+    court: "Oak Park Courts", courtMiles: "0.8",
     day: "06", month: "Jun", weekday: "Tomorrow", time: "8:00 AM",
     next: true,
   },
@@ -18,7 +18,7 @@ const SESSIONS = [
     id: 2, bucket: "upcoming", status: "pending",
     opp: "Jordan Williams", oppHandle: "@jordanw",
     sport: "Tennis",
-    court: "Lincoln Park Cultural Center Tennis Courts", courtMiles: "3.1",
+    court: "UC Berkeley · Court #4", courtMiles: "2.3",
     day: "08", month: "Jun", weekday: "Thu", time: "6:30 PM",
     sentByMe: true,
   },
@@ -26,7 +26,7 @@ const SESSIONS = [
     id: 3, bucket: "upcoming", status: "confirmed",
     opp: "Aisha Johnson", oppHandle: "@aishaj",
     sport: "Pickleball",
-    court: "Lake Shore Park", courtMiles: "1.2",
+    court: "Cesar Chavez Park", courtMiles: "1.6",
     day: "10", month: "Jun", weekday: "Sat", time: "9:30 AM",
   },
 
@@ -35,7 +35,7 @@ const SESSIONS = [
     id: 4, bucket: "requests", status: "requested",
     opp: "Marcus Chen", oppHandle: "@marcusc",
     sport: "Tennis",
-    court: "Wicker Park Tennis Courts", courtMiles: "3.4",
+    court: "Strawberry Canyon", courtMiles: "3.7",
     day: "11", month: "Jun", weekday: "Sun", time: "10:00 AM",
     note: "Up for an early Sunday match? I'll bring new balls.",
   },
@@ -45,7 +45,7 @@ const SESSIONS = [
     id: 5, bucket: "past", status: "completed",
     opp: "Maya Patel",
     sport: "Pickleball",
-    court: "Maggie Daley Park Tennis",
+    court: "Oak Park Courts",
     day: "01", month: "Jun", weekday: "Sun", time: "8:00 AM",
     result: "W", score: "11–7, 11–9",
   },
@@ -53,7 +53,7 @@ const SESSIONS = [
     id: 6, bucket: "past", status: "completed",
     opp: "Jordan Williams",
     sport: "Tennis",
-    court: "Grant Park Tennis Center",
+    court: "UC Berkeley · Court #4",
     day: "30", month: "May", weekday: "Fri", time: "6:30 PM",
     result: "W", score: "6–3, 4–6, 7–5",
   },
@@ -61,7 +61,7 @@ const SESSIONS = [
     id: 7, bucket: "past", status: "completed",
     opp: "Marcus Chen",
     sport: "Tennis",
-    court: "Wicker Park Tennis Courts",
+    court: "Strawberry Canyon",
     day: "26", month: "May", weekday: "Mon", time: "7:00 AM",
     result: "L", score: "3–6, 2–6",
   },
@@ -69,7 +69,7 @@ const SESSIONS = [
     id: 8, bucket: "past", status: "completed",
     opp: "Aisha Johnson",
     sport: "Pickleball",
-    court: "Lake Shore Park",
+    court: "Cesar Chavez Park",
     day: "23", month: "May", weekday: "Fri", time: "9:00 AM",
     result: "W", score: "11–4, 11–8",
   },
@@ -77,7 +77,7 @@ const SESSIONS = [
     id: 9, bucket: "past", status: "completed",
     opp: "Sofía Rodríguez",
     sport: "Pickleball",
-    court: "Welles Park",
+    court: "Oak Park Courts",
     day: "20", month: "May", weekday: "Tue", time: "5:00 PM",
     result: "L", score: "9–11, 7–11",
   },
@@ -98,6 +98,10 @@ const StatusPill = ({ status, sentByMe }) => {
     </span>
   );
 };
+
+const SportIcon = ({ sport, ...rest }) => (
+  <Icon name={sport === "Tennis" ? "tennis" : "paddle"} {...rest} />
+);
 
 function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
   s: any;
@@ -124,7 +128,7 @@ function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
           </div>
           <div className="sess-meta">
             <span className="sess-meta-item">
-              <b>{s.sport}</b>
+              <SportIcon sport={s.sport} size={14} /> <b>{s.sport}</b>
             </span>
             <span className="sess-meta-item">
               <Icon name="pin" size={14} /> {s.court}
@@ -153,7 +157,7 @@ function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
       </div>
 
       <div className="sess-right">
-        {s.status === "completed" && s.result ? (
+        {s.status === "completed" ? (
           <div className="result-line">
             <span className={"result-tag " + s.result.toLowerCase()}>{s.result}</span>
             {s.score}

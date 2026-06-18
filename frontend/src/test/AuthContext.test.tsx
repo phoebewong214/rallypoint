@@ -15,12 +15,9 @@ vi.mock("../api/auth", () => ({
       user: { id: "2", name, initials: name[0], email },
       token: "fake.jwt.token",
     })),
-    // No session cookie by default → /me rejects on mount.
-    me: vi.fn(async () => {
-      throw new Error("401");
-    }),
-    logout: vi.fn(async () => ({ ok: true })),
-    logoutAll: vi.fn(async () => ({ ok: true })),
+    me: vi.fn(async () => ({
+      user: { id: "1", name: "Test User", initials: "TU", email: "x@y.com" },
+    })),
   },
 }));
 
@@ -33,14 +30,14 @@ describe("AuthContext", () => {
     localStorage.clear();
   });
 
-  it("starts unauthenticated when there is no session", async () => {
+  it("starts unauthenticated when no token is cached", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
   });
 
-  it("login() caches the user and sets isAuthenticated (no token in storage)", async () => {
+  it("login() persists the user + token and sets isAuthenticated", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -50,13 +47,10 @@ describe("AuthContext", () => {
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user?.name).toBe("Test User");
-    // The JWT lives in an httpOnly cookie, never in localStorage.
-    expect(localStorage.getItem("rallypoint.token")).toBeNull();
-    expect(localStorage.getItem("rallypoint.user")).not.toBeNull();
+    expect(localStorage.getItem("rallypoint.token")).toBe("fake.jwt.token");
   });
 
-  it("logout() clears the user cache and calls the logout endpoint", async () => {
-    const { authApi } = await import("../api/auth");
+  it("logout() clears user and token from storage", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(async () => {
@@ -68,8 +62,8 @@ describe("AuthContext", () => {
     });
 
     expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorage.getItem("rallypoint.token")).toBeNull();
     expect(localStorage.getItem("rallypoint.user")).toBeNull();
-    expect((authApi.logout as any)).toHaveBeenCalled();
   });
 
   it("'auth:expired' window event triggers logout", async () => {

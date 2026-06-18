@@ -11,7 +11,6 @@ export interface User {
   name: string;
   initials: string;
   email?: string;
-  emailVerified?: boolean;
   handle?: string;
   ntrp?: NTRP;
   primarySport?: Sport;
@@ -151,6 +150,8 @@ export type IconName =
   | "bookmark"
   | "check"
   | "calendar"
+  | "tennis"
+  | "paddle"
   | "mail"
   | "lock"
   | "user"
@@ -172,7 +173,6 @@ export type IconName =
   | "logout"
   | "bell"
   | "sun"
-  | "moon"
-  | "menu";
+  | "moon";
 
 export type NavId = "find" | "matches" | "feed" | "courts" | "schedule";

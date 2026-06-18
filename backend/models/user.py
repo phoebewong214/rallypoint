@@ -13,16 +13,9 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    # Bumped to invalidate every outstanding JWT for this user (logout-all,
-    # password change, suspected compromise). Tokens embed the value they were
-    # issued against; require_auth rejects any token whose `tv` no longer matches.
-    token_version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
-    email_verified = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     name = db.Column(db.String(120), nullable=False)
     handle = db.Column(db.String(80), unique=True, nullable=False)
     location = db.Column(db.String(120))
-    lat = db.Column(db.Float)   # latitude for distance calculations
-    lng = db.Column(db.Float)   # longitude for distance calculations
     bio = db.Column(db.Text)
     primary_sport = db.Column(db.String(20))  # "Tennis" | "Pickleball"
     avatar_color = db.Column(db.String(120))  # CSS gradient string
@@ -42,10 +35,6 @@ class User(db.Model):
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
-    def revoke_tokens(self) -> None:
-        """Invalidate every JWT previously issued to this user."""
-        self.token_version = (self.token_version or 1) + 1
-
     @property
     def initials(self) -> str:
         parts = [p[0] for p in (self.name or "?").split() if p]
@@ -64,8 +53,6 @@ class User(db.Model):
             "initials": self.initials,
             "handle": self.handle,
             "location": self.location,
-            "lat": self.lat,
-            "lng": self.lng,
             "bio": self.bio,
             "primarySport": self.primary_sport,
             "avatarColor": self.avatar_color,
@@ -75,7 +62,6 @@ class User(db.Model):
         }
         if with_email:
             out["email"] = self.email
-            out["emailVerified"] = self.email_verified
         return out
 
 

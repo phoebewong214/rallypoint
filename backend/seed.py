@@ -14,25 +14,21 @@ from models import (
 
 
 SAMPLE_USERS = [
-    # email, name, primary_sport, location, lat, lng, tennis_ntrp, pickle_ntrp, avail
-    ("alex@rally.app",   "Alex Rivera",     "Pickleball", "The Loop, Chicago",      41.8819, -87.6278, "3.0", "3.5", "Weekday evenings, Sat morning"),
-    ("maya@rally.app",   "Maya Patel",      "Pickleball", "Streeterville, Chicago", 41.8932, -87.6212, None,  "3.5", "Weekends, mornings"),
-    ("jordan@rally.app", "Jordan Williams", "Tennis",     "River North, Chicago",   41.8924, -87.6340, "4.0", None,  "Weekday evenings"),
-    ("sofia@rally.app",  "Sofia Rodriguez", "Pickleball", "Wicker Park, Chicago",   41.9088, -87.6796, None,  "3.0", "Afternoons, weekdays"),
-    ("marcus@rally.app", "Marcus Chen",     "Tennis",     "Lincoln Park, Chicago",  41.9214, -87.6513, "4.5", None,  "Mornings, weekends"),
-    ("aisha@rally.app",  "Aisha Johnson",   "Pickleball", "West Loop, Chicago",     41.8835, -87.6534, None,  "3.5", "Evenings, weekends"),
+    # email, name, primary_sport, location, tennis_ntrp, pickle_ntrp, avail
+    ("alex@rally.app",   "Alex Rivera",     "Pickleball", "Berkeley, CA", "3.0", "3.5", "Weekday evenings, Sat morning"),
+    ("maya@rally.app",   "Maya Patel",      "Pickleball", "Berkeley, CA", None,  "3.5", "Weekends, mornings"),
+    ("jordan@rally.app", "Jordan Williams", "Tennis",     "Berkeley, CA", "4.0", None,  "Weekday evenings"),
+    ("sofia@rally.app",  "Sofia Rodriguez", "Pickleball", "Berkeley, CA", None,  "3.0", "Afternoons, weekdays"),
+    ("marcus@rally.app", "Marcus Chen",     "Tennis",     "Berkeley, CA", "4.5", None,  "Mornings, weekends"),
+    ("aisha@rally.app",  "Aisha Johnson",   "Pickleball", "Berkeley, CA", None,  "3.5", "Evenings, weekends"),
 ]
 
-# Real Chicago courts (lat/lng verified) — matches the frontend Courts page.
 SAMPLE_COURTS = [
-    ("lincoln-park",     "Lincoln Park Cultural Center Tennis Courts", "2045 N Lincoln Park West · Chicago", 41.9220, -87.6350, "tennis",     "Tennis,Pickleball", 6,  "Outdoor · Hard",            True),
-    ("grant-park",       "Grant Park Tennis Center",                    "331 E Randolph St · Chicago",        41.8835, -87.6188, "tennis",     "Tennis",            12, "Outdoor · Hard",            True),
-    ("maggie-daley",     "Maggie Daley Park Tennis",                    "337 E Randolph St · Chicago",        41.8855, -87.6178, "pickleball", "Tennis,Pickleball", 4,  "Outdoor · Resurfaced 2024", True),
-    ("wicker-park",      "Wicker Park Tennis Courts",                   "1425 N Damen Ave · Chicago",         41.9080, -87.6790, "tennis",     "Tennis",            4,  "Outdoor · Hard",            False),
-    ("welles-park",      "Welles Park",                                 "2333 W Sunnyside Ave · Chicago",     41.9647, -87.6892, "pickleball", "Tennis,Pickleball", 8,  "Outdoor · Hard",            True),
-    ("lake-shore-park",  "Lake Shore Park",                             "808 N Lake Shore Dr · Chicago",      41.8974, -87.6191, "pickleball", "Pickleball",        2,  "Outdoor · Resurfaced 2023", True),
-    ("smith-park",       "Smith Park",                                  "2526 W Grand Ave · Chicago",         41.8909, -87.6918, "pickleball", "Pickleball",        4,  "Indoor · Climate-controlled", True),
-    ("mcguane-park",     "McGuane Park",                                "2901 S Poplar Ave · Chicago",        41.8400, -87.6580, "pickleball", "Tennis,Pickleball", 4,  "Outdoor · Hard",            False),
+    ("oak-park",   "Oak Park Courts",             "3500 Oak Park Dr · Berkeley",   37.890, -122.265, "pickleball", "Tennis,Pickleball", 4, "Outdoor · Hard", True),
+    ("uc-tennis",  "UC Berkeley · Hellman Tennis", "Channing Way · Berkeley",       37.867, -122.262, "tennis",     "Tennis",            6, "Outdoor + Indoor", True),
+    ("chavez",     "Cesar Chavez Park",            "11 Spinnaker Way · Berkeley",   37.874, -122.319, "pickleball", "Tennis,Pickleball", 8, "Outdoor · Hard", False),
+    ("strawberry", "Strawberry Canyon Rec",        "Centennial Dr · Berkeley",      37.876, -122.241, "tennis",     "Tennis",            4, "Outdoor · Hard", False),
+    ("live-oak",   "Live Oak Park",                "1301 Shattuck Ave · Berkeley",  37.882, -122.270, "pickleball", "Pickleball",        2, "Outdoor · Resurfaced 2024", True),
 ]
 
 
@@ -52,10 +48,9 @@ def _seed():
 
     # Users + sport profiles
     users = {}
-    for email, name, primary, loc, lat, lng, tennis_ntrp, pickle_ntrp, avail in SAMPLE_USERS:
+    for email, name, primary, loc, tennis_ntrp, pickle_ntrp, avail in SAMPLE_USERS:
         u = User(email=email, name=name, handle="@" + email.split("@")[0],
-                 primary_sport=primary, location=loc, lat=lat, lng=lng,
-                 email_verified=True,
+                 primary_sport=primary, location=loc,
                  bio=f"Capstone-era player picking up {primary.lower()} this semester.")
         u.set_password("rally1234")
         db.session.add(u)
@@ -63,11 +58,11 @@ def _seed():
         if tennis_ntrp:
             db.session.add(SportProfile(user_id=u.id, sport="Tennis",
                                         ntrp=tennis_ntrp, availability_summary=avail,
-                                        home_court_id=courts["grant-park"].id))
+                                        home_court_id=courts["uc-tennis"].id))
         if pickle_ntrp:
             db.session.add(SportProfile(user_id=u.id, sport="Pickleball",
                                         ntrp=pickle_ntrp, availability_summary=avail,
-                                        home_court_id=courts["lincoln-park"].id))
+                                        home_court_id=courts["oak-park"].id))
         users[email] = u
     db.session.flush()
 
@@ -95,23 +90,23 @@ def _seed():
     # Sessions
     now = datetime.utcnow()
     sessions = [
-        Session(host_id=alex.id,   guest_id=maya.id,   court_id=courts["lincoln-park"].id,
+        Session(host_id=alex.id,   guest_id=maya.id,   court_id=courts["oak-park"].id,
                 sport="Pickleball", scheduled_at=now + timedelta(days=1, hours=2),
                 status=SessionStatus.CONFIRMED.value),
-        Session(host_id=alex.id,   guest_id=jordan.id, court_id=courts["grant-park"].id,
+        Session(host_id=alex.id,   guest_id=jordan.id, court_id=courts["uc-tennis"].id,
                 sport="Tennis",     scheduled_at=now + timedelta(days=3, hours=10),
                 status=SessionStatus.PENDING.value),
-        Session(host_id=marcus.id, guest_id=alex.id,   court_id=courts["wicker-park"].id,
+        Session(host_id=marcus.id, guest_id=alex.id,   court_id=courts["strawberry"].id,
                 sport="Tennis",     scheduled_at=now + timedelta(days=6),
                 status=SessionStatus.REQUESTED.value,
                 note="Up for an early Sunday match? I'll bring new balls."),
-        Session(host_id=alex.id,   guest_id=maya.id,   court_id=courts["lincoln-park"].id,
+        Session(host_id=alex.id,   guest_id=maya.id,   court_id=courts["oak-park"].id,
                 sport="Pickleball", scheduled_at=now - timedelta(days=5),
                 status=SessionStatus.COMPLETED.value, result="W", score="11-7, 11-9"),
-        Session(host_id=alex.id,   guest_id=jordan.id, court_id=courts["grant-park"].id,
+        Session(host_id=alex.id,   guest_id=jordan.id, court_id=courts["uc-tennis"].id,
                 sport="Tennis",     scheduled_at=now - timedelta(days=7),
                 status=SessionStatus.COMPLETED.value, result="W", score="6-3, 4-6, 7-5"),
-        Session(host_id=alex.id,   guest_id=sofia.id,  court_id=courts["lincoln-park"].id,
+        Session(host_id=alex.id,   guest_id=sofia.id,  court_id=courts["oak-park"].id,
                 sport="Pickleball", scheduled_at=now - timedelta(days=14),
                 status=SessionStatus.COMPLETED.value, result="L", score="9-11, 7-11"),
     ]
