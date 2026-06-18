@@ -6,9 +6,11 @@ POST /api/auth/login   body: {email, password}
 GET  /api/auth/me      header: Authorization: Bearer <jwt>
 """
 import re
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, make_response
 from flask_limiter.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
+
+from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
 from models import User
@@ -118,15 +120,9 @@ def signup():
         return jsonify({"error": "Account with that email already exists"}), 409
 
     _send_verification(user)
-    return (
-        jsonify(
-            {
-                "user": user.to_dict(with_email=True),
-                "token": issue_token(user.id, user.token_version),
-            }
-        ),
-        201,
-    )
+    token = issue_token(user.id, user.token_version)
+    resp = make_response(jsonify({"user": user.to_dict(with_email=True), "token": token}), 201)
+    return set_auth_cookies(resp, token)
 
 
 @auth_bp.post("/login")
@@ -158,12 +154,9 @@ def login():
     user = User.query.filter_by(email=data.email).first()
     if not user or not user.check_password(data.password):
         return jsonify({"error": "Invalid email or password"}), 401
-    return jsonify(
-        {
-            "user": user.to_dict(with_email=True),
-            "token": issue_token(user.id, user.token_version),
-        }
-    )
+    token = issue_token(user.id, user.token_version)
+    resp = make_response(jsonify({"user": user.to_dict(with_email=True), "token": token}))
+    return set_auth_cookies(resp, token)
 
 
 @auth_bp.get("/me")
@@ -241,7 +234,20 @@ def logout_all():
     user = current_user()
     user.revoke_tokens()
     db.session.commit()
-    return jsonify({"ok": True})
+    return clear_auth_cookies(make_response(jsonify({"ok": True})))
+
+
+@auth_bp.post("/logout")
+def logout():
+    """
+    Clear the auth cookies on this device. Safe to call when already logged out
+    (browsers can't delete httpOnly cookies from JS, so this must be a request).
+    ---
+    tags: [Auth]
+    responses:
+      200: {description: Cookies cleared}
+    """
+    return clear_auth_cookies(make_response(jsonify({"ok": True})))
 
 
 @auth_bp.post("/verify-email")

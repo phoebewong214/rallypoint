@@ -40,3 +40,16 @@ class Config:
     # Lifetimes for single-use action tokens (minutes).
     VERIFY_TOKEN_TTL_MIN = int(os.environ.get("VERIFY_TOKEN_TTL_MIN", str(60 * 24)))
     RESET_TOKEN_TTL_MIN = int(os.environ.get("RESET_TOKEN_TTL_MIN", "60"))
+
+    # Auth cookies. The JWT lives in an httpOnly cookie (JS can't read it, so
+    # XSS can't exfiltrate it); a readable CSRF cookie is echoed back in a
+    # header for double-submit CSRF protection on unsafe methods.
+    AUTH_COOKIE_NAME = os.environ.get("AUTH_COOKIE_NAME", "rp_session")
+    CSRF_COOKIE_NAME = os.environ.get("CSRF_COOKIE_NAME", "rp_csrf")
+    # Secure=False for http://localhost dev; set COOKIE_SECURE=true in prod.
+    COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    # "Lax" is enough when the SPA and API share a registrable domain
+    # (localhost:3000 ↔ localhost:5050). Use "None" for true cross-site setups.
+    COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "Lax")
+    COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN") or None
+    AUTH_COOKIE_MAX_AGE = int(os.environ.get("AUTH_COOKIE_MAX_AGE", str(7 * 24 * 3600)))

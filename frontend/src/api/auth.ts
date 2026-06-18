@@ -39,6 +39,9 @@ export const authApi = {
   updateMe: (body: UpdateProfileBody) =>
     api<{ user: User }>("/auth/me", { method: "PATCH", body }),
 
+  // Clear the auth cookies on this device.
+  logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+
   // Revoke every outstanding token for the current user ("sign out everywhere").
   logoutAll: () => api<{ ok: boolean }>("/auth/logout-all", { method: "POST" }),
 

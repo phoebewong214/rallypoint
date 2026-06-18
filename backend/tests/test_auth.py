@@ -223,3 +223,55 @@ def test_reset_password_updates_pw_revokes_sessions_and_is_single_use(client, ap
         json={"token": reset_token, "password": "another99"},
     )
     assert reuse.status_code == 400
+
+
+def _set_cookie_value(rsp, name):
+    for h in rsp.headers.get_all("Set-Cookie"):
+        if h.startswith(name + "="):
+            return h.split(";", 1)[0].split("=", 1)[1]
+    return None
+
+
+def test_login_sets_httponly_session_and_readable_csrf_cookie(client, app):
+    _signup(client, "cookie@rally.app")
+    rsp = client.post(
+        "/api/auth/login", json={"email": "cookie@rally.app", "password": "rally1234"}
+    )
+    set_cookies = rsp.headers.get_all("Set-Cookie")
+    session_line = next(h for h in set_cookies if h.startswith(app.config["AUTH_COOKIE_NAME"] + "="))
+    csrf_line = next(h for h in set_cookies if h.startswith(app.config["CSRF_COOKIE_NAME"] + "="))
+    # JWT cookie must be httpOnly (XSS-safe); CSRF cookie must be JS-readable.
+    assert "HttpOnly" in session_line
+    assert "HttpOnly" not in csrf_line
+
+
+def test_cookie_session_authenticates_without_bearer(client):
+    # signup populates the test client's cookie jar
+    _signup(client, "cookieauth@rally.app")
+    rsp = client.get("/api/auth/me")  # no Authorization header → cookie used
+    assert rsp.status_code == 200
+    assert rsp.get_json()["user"]["email"] == "cookieauth@rally.app"
+
+
+def test_cookie_auth_enforces_csrf_on_unsafe_methods(client, app):
+    rsp = client.post(
+        "/api/auth/signup",
+        json={"email": "csrf@rally.app", "password": "rally1234", "name": "Csrf"},
+    )
+    csrf = _set_cookie_value(rsp, app.config["CSRF_COOKIE_NAME"])
+
+    # Safe method: no CSRF token needed.
+    assert client.get("/api/auth/me").status_code == 200
+    # Unsafe method via cookie without the CSRF header → rejected.
+    assert client.post("/api/auth/logout-all").status_code == 403
+    # With the matching double-submit header → allowed.
+    ok = client.post("/api/auth/logout-all", headers={"X-CSRF-Token": csrf})
+    assert ok.status_code == 200
+
+
+def test_logout_expires_the_session_cookie(client):
+    _signup(client, "bye@rally.app")
+    rsp = client.post("/api/auth/logout")
+    assert rsp.status_code == 200
+    joined = " ".join(rsp.headers.get_all("Set-Cookie"))
+    assert "rp_session=" in joined and ("Max-Age=0" in joined or "Expires" in joined)
