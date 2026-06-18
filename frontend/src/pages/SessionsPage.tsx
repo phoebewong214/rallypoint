@@ -2,8 +2,12 @@ import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { IconName } from "../types";
 import { TopNav, Icon, Avatar } from "../rally-shared";
-import { useSessions, useAcceptSession, useDeclineSession } from "../hooks/useSessions";
+import {
+  useSessions, useAcceptSession, useDeclineSession,
+  useCancelSession, useRescheduleSession,
+} from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
+import { ScheduleModal } from "../components/ScheduleModal";
 
 const SESSIONS = [
   // ----- Upcoming -----
@@ -101,10 +105,12 @@ const StatusPill = ({ status, sentByMe }) => {
   );
 };
 
-function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
+function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onSoon, busy }: {
   s: any;
   onAccept: (id: number) => void;
   onDecline: (id: number) => void;
+  onCancel: (id: number) => void;
+  onReschedule: (s: any) => void;
   onSoon: (feature: string) => void;
   busy?: boolean;
 }) {
@@ -170,18 +176,14 @@ function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
               <button className="btn-sm primary" type="button" onClick={() => onSoon("Messaging")}>
                 <Icon name="message" size={14} stroke={2.4} /> Message
               </button>
-              <button className="btn-sm icon-only" title="Reschedule" type="button" onClick={() => onSoon("Rescheduling")}>
-                <Icon name="calendar" size={15} />
-              </button>
-              <button className="btn-sm icon-only" title="More" type="button" onClick={() => onSoon("More actions")}>
-                <Icon name="more" size={16} />
-              </button>
+              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
+              <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
             </>
           )}
           {s.status === "pending" && (
             <>
-              <button className="btn-sm ghost" type="button" onClick={() => onSoon("Rescheduling")}>Reschedule</button>
-              <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Cancel</button>
+              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
+              <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
             </>
           )}
           {s.status === "requested" && (
@@ -189,6 +191,7 @@ function SessionRow({ s, onAccept, onDecline, onSoon, busy }: {
               <button className="btn-sm primary" type="button" onClick={() => onAccept(s.id)} disabled={busy}>
                 <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
               </button>
+              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Propose new time</button>
               <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Decline</button>
             </>
           )}
@@ -226,23 +229,49 @@ function SessionsPage() {
 
   const accept = useAcceptSession();
   const decline = useDeclineSession();
+  const cancel = useCancelSession();
+  const reschedule = useRescheduleSession();
+
+  // The session being rescheduled (opens the modal), if any.
+  const [reschedTarget, setReschedTarget] = useState<any | null>(null);
 
   const handleAccept = (id: number) => {
     accept.mutate(id, {
-      onSuccess: () => show("Session accepted", "success"),
+      onSuccess: () => show("Game confirmed", "success"),
       onError:   () => show("Couldn't accept — try again", "error"),
     });
   };
   const handleDecline = (id: number) => {
     decline.mutate(id, {
-      onSuccess: () => show("Session declined", "success"),
+      onSuccess: () => show("Request declined", "success"),
       onError:   () => show("Couldn't decline — try again", "error"),
     });
+  };
+  const handleCancel = (id: number) => {
+    cancel.mutate(id, {
+      onSuccess: () => show("Game cancelled", "success"),
+      onError:   () => show("Couldn't cancel — try again", "error"),
+    });
+  };
+  const handleReschedule = (iso: string, note?: string) => {
+    if (!reschedTarget) return;
+    reschedule.mutate(
+      { id: reschedTarget.id, scheduledAt: iso, note },
+      {
+        onSuccess: () => {
+          setReschedTarget(null);
+          show("New time proposed — waiting on them to confirm", "success");
+        },
+        onError: () => show("Couldn't reschedule — try again", "error"),
+      },
+    );
   };
   const busyId = accept.isPending
     ? accept.variables
     : decline.isPending
     ? decline.variables
+    : cancel.isPending
+    ? cancel.variables
     : null;
 
   const counts = useMemo(() => ({
@@ -369,6 +398,8 @@ function SessionsPage() {
                 s={s}
                 onAccept={handleAccept}
                 onDecline={handleDecline}
+                onCancel={handleCancel}
+                onReschedule={setReschedTarget}
                 onSoon={soon}
                 busy={busyId === s.id}
               />
@@ -376,6 +407,18 @@ function SessionsPage() {
           )}
         </div>
       </main>
+
+      {reschedTarget && (
+        <ScheduleModal
+          title="Propose a new time"
+          subtitle={`with ${reschedTarget.opp ?? "your partner"}`}
+          defaultISO={reschedTarget.scheduledAt}
+          submitLabel="Send new time"
+          busy={reschedule.isPending}
+          onSubmit={handleReschedule}
+          onClose={() => setReschedTarget(null)}
+        />
+      )}
     </>
   );
 }

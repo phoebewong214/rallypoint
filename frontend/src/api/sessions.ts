@@ -28,6 +28,11 @@ export interface CreateSessionBody {
   note?: string;
 }
 
+export interface RescheduleBody {
+  scheduledAt: string; // ISO
+  note?: string;
+}
+
 export const sessionsApi = {
   list: () => api<{ sessions: ApiSession[] }>("/sessions"),
   create: (body: CreateSessionBody) =>
@@ -36,4 +41,8 @@ export const sessionsApi = {
     api<{ session: ApiSession }>(`/sessions/${id}/accept`, { method: "POST" }),
   decline: (id: number) =>
     api<{ session: ApiSession }>(`/sessions/${id}/decline`, { method: "POST" }),
+  cancel: (id: number) =>
+    api<{ session: ApiSession }>(`/sessions/${id}/cancel`, { method: "POST" }),
+  reschedule: (id: number, body: RescheduleBody) =>
+    api<{ session: ApiSession }>(`/sessions/${id}/reschedule`, { method: "POST", body }),
 };

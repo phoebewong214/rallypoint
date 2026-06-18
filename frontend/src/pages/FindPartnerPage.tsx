@@ -4,6 +4,7 @@ import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useCreateSession, useSessions } from "../hooks/useSessions";
+import { ScheduleModal } from "../components/ScheduleModal";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -583,32 +584,34 @@ function FindPartnerPage() {
     setter(next);
   };
 
-  /* Send a real game request to the backend if we're on live data.
-     Falls back to local "requested" state for the demo dataset. */
+  // Clicking "Request Game" opens the scheduling modal for that player so the
+  // user picks a time (+ note) instead of a silent default.
+  const [requestTarget, setRequestTarget] = useState<any | null>(null);
   const handleRequest = (id: number) => {
-    // Default proposed time: tomorrow 6 PM local
-    const dt = new Date();
-    dt.setDate(dt.getDate() + 1);
-    dt.setHours(18, 0, 0, 0);
+    setRequestTarget(visiblePlayers.find((p) => p.id === id) ?? null);
+  };
 
-    if (dataSource === "live") {
-      createSession.mutate(
-        { guestId: id, sport: filters.sport as any, scheduledAt: dt.toISOString() },
-        {
-          onSuccess: () => {
-            setRequested((prev) => new Set(prev).add(id));
-            show("Request sent — they'll see it in their Sessions tab", "success");
-          },
-          onError: (err: any) => {
-            show(err?.message || "Couldn't send request", "error");
-          },
-        }
-      );
-    } else {
-      // demo mode — local toggle only
-      toggle(requested, setRequested)(id);
-      show("Request sent (demo)", "success");
+  const confirmRequest = (iso: string, note?: string) => {
+    const target = requestTarget;
+    if (!target) return;
+    if (dataSource === "demo") {
+      // No backend to talk to — local-only acknowledgement.
+      toggle(requested, setRequested)(target.id);
+      setRequestTarget(null);
+      show("Request sent (example data)", "success");
+      return;
     }
+    createSession.mutate(
+      { guestId: target.id, sport: applied.sport, scheduledAt: iso, note },
+      {
+        onSuccess: () => {
+          setRequested((prev) => new Set(prev).add(target.id));
+          setRequestTarget(null);
+          show("Request sent — they'll see it in their Sessions tab", "success");
+        },
+        onError: (err: any) => show(err?.message || "Couldn't send request", "error"),
+      }
+    );
   };
 
   return (
@@ -726,6 +729,17 @@ function FindPartnerPage() {
           </div>
         )}
       </main>
+
+      {requestTarget && (
+        <ScheduleModal
+          title={`Request a game with ${requestTarget.name}`}
+          subtitle={`${applied.sport} · pick a time that works for you both`}
+          submitLabel="Send request"
+          busy={createSession.isPending}
+          onSubmit={confirmRequest}
+          onClose={() => setRequestTarget(null)}
+        />
+      )}
     </>
   );
 }

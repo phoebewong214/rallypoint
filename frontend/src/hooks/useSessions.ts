@@ -34,3 +34,20 @@ export function useCreateSession() {
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
+
+export function useCancelSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => sessionsApi.cancel(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useRescheduleSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, scheduledAt, note }: { id: number; scheduledAt: string; note?: string }) =>
+      sessionsApi.reschedule(id, { scheduledAt, note }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
