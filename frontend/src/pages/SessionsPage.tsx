@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import type { IconName } from "../types";
 import { TopNav, Icon, Avatar } from "../rally-shared";
 import { useSessions, useAcceptSession, useDeclineSession } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
@@ -89,6 +90,7 @@ const StatusPill = ({ status, sentByMe }) => {
     pending:   { label: sentByMe ? "Awaiting reply" : "Awaiting your reply", cls: "pending" },
     requested: { label: "New request", cls: "requested" },
     completed: { label: "Completed", cls: "completed" },
+    cancelled: { label: "Cancelled", cls: "cancelled" },
   };
   const m = map[status] || { label: status, cls: "" };
   return (
@@ -214,9 +216,11 @@ function SessionsPage() {
   const [tab, setTab] = useState("upcoming");
   const { show, soon } = useToast();
 
-  /* API-first with fallback to the rich local SESSIONS demo array. */
-  const { data: apiData, isError: apiError } = useSessions();
-  const liveSessions = apiData?.sessions?.length ? apiData.sessions : null;
+  /* Live sessions from the API. An EMPTY array is a real "no sessions yet"
+     answer (new users) — only fall back to the demo array when the backend
+     never responds, so real users never see fabricated matches. */
+  const { data: apiData } = useSessions();
+  const liveSessions = apiData ? apiData.sessions : null;
   const sessions = liveSessions ?? (SESSIONS as any);
   const dataSource: "live" | "demo" = liveSessions ? "live" : "demo";
 
@@ -247,6 +251,26 @@ function SessionsPage() {
     past:     sessions.filter((s: any) => s.bucket === "past").length,
   }), [sessions]);
 
+  // Real stats derived from the session list (no hardcoded numbers).
+  const stats = useMemo(() => {
+    const completed = sessions.filter((s: any) => s.status === "completed");
+    const wins = completed.filter((s: any) => s.result === "W").length;
+    const losses = completed.filter((s: any) => s.result === "L").length;
+    const decided = wins + losses;
+    const pending = sessions.filter((s: any) => s.status === "pending");
+    const pendingSent = pending.filter((s: any) => s.sentByMe).length;
+    return {
+      completed: completed.length,
+      wins,
+      losses,
+      winRate: decided ? Math.round((wins / decided) * 100) : null,
+      pending: pending.length,
+      pendingSent,
+      pendingReceived: pending.length - pendingSent,
+      nextUp: sessions.find((s: any) => s.bucket === "upcoming") ?? null,
+    };
+  }, [sessions]);
+
   const visible = sessions.filter((s: any) => s.bucket === tab);
 
   return (
@@ -258,10 +282,9 @@ function SessionsPage() {
           <div>
             <div className="eyebrow">
               <span className="dot" />
-              {dataSource === "live"
-                ? `Live · ${counts.upcoming + counts.requests} upcoming & pending`
-                : `Demo · ${counts.upcoming + counts.requests} upcoming & pending`}
-              {apiError && " · backend offline"}
+              {dataSource === "demo"
+                ? "Showing example sessions while we reconnect"
+                : `${counts.upcoming} upcoming · ${counts.requests} request${counts.requests === 1 ? "" : "s"}`}
             </div>
             <h1 className="h1">My <em>sessions.</em></h1>
             <p className="sub">
@@ -283,34 +306,39 @@ function SessionsPage() {
           <div className="stat-card">
             <span className="label">Upcoming</span>
             <span className="value">{counts.upcoming}</span>
-            <span className="sub">Next: tomorrow, 8 AM</span>
+            <span className="sub">
+              {stats.nextUp ? `Next: ${stats.nextUp.weekday}, ${stats.nextUp.time}` : "Nothing scheduled"}
+            </span>
           </div>
           <div className="stat-card">
             <span className="label">Pending Confirmations</span>
-            <span className="value">2</span>
-            <span className="sub">1 sent · 1 received</span>
+            <span className="value">{stats.pending}</span>
+            <span className="sub">{stats.pendingSent} sent · {stats.pendingReceived} received</span>
           </div>
           <div className="stat-card">
-            <span className="label">Played This Month</span>
-            <span className="value">5</span>
-            <span className="sub">+2 vs last month</span>
+            <span className="label">Games Played</span>
+            <span className="value">{stats.completed}</span>
+            <span className="sub">{stats.completed === 0 ? "No games yet" : "Completed"}</span>
           </div>
           <div className="stat-card accent">
-            <span className="label">Win Rate · 30d</span>
-            <span className="value">60%</span>
-            <span className="sub">3W · 2L</span>
+            <span className="label">Win Rate</span>
+            <span className="value">{stats.winRate === null ? "—" : `${stats.winRate}%`}</span>
+            <span className="sub">{stats.wins}W · {stats.losses}L</span>
           </div>
         </section>
 
         {/* Tabs */}
-        <div className="tab-bar">
+        <div className="tab-bar" role="tablist" aria-label="Session filter">
           {TABS.map((t) => (
             <button
               key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
               className={"tab" + (tab === t.id ? " active" : "")}
               onClick={() => setTab(t.id)}
             >
-              <Icon name={t.icon} size={15} /> {t.label}
+              <Icon name={t.icon as IconName} size={15} /> {t.label}
               <span className="tab-count">{counts[t.id]}</span>
             </button>
           ))}
