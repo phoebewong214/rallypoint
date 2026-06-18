@@ -3,7 +3,7 @@ import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
-import { useCreateSession } from "../hooks/useSessions";
+import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -496,13 +496,18 @@ function FindPartnerPage() {
   const [saved, setSaved] = useState(new Set());
   const [sort, setSort] = useState("match");
 
+  // Real activity stats from the user's sessions.
+  const { data: sessionsData } = useSessions();
+  const sessions = sessionsData?.sessions ?? [];
+  const matchesPlayed = sessions.filter((s) => s.status === "completed").length;
+  const upcomingCount = sessions.filter((s) => s.bucket === "upcoming").length;
+
   /* ---- Real backend matches via /api/players ----
      Falls back to the local demo data below when the backend
      is unreachable or returns no rows (e.g. you haven't seeded yet). */
   const {
     data: apiData,
     isLoading: apiLoading,
-    isError: apiError,
   } = usePlayers({
     sport: applied.sport,
     ntrpMin: applied.ntrp[0],
@@ -615,11 +620,13 @@ function FindPartnerPage() {
           <div>
             <div className="eyebrow">
               <span className="dot" />
-              {apiLoading
-                ? "Loading live matches…"
-                : dataSource === "live"
-                  ? `Live · backend AI matched ${liveMatches!.length} player${liveMatches!.length === 1 ? "" : "s"}`
-                  : `Demo · ${PLAYERS.filter((p) => p.online).length} players online`}
+              {apiLoading && !liveMatches
+                ? "Finding your matches…"
+                : dataSource === "demo"
+                  ? "Showing example players while we reconnect"
+                  : visiblePlayers.length === 0
+                    ? "No partners match these filters yet"
+                    : `${visiblePlayers.length} partner${visiblePlayers.length === 1 ? "" : "s"} matched on skill & schedule`}
             </div>
             <h1 className="h1">Find your next <em>rally partner.</em></h1>
             <p className="sub">
@@ -633,8 +640,13 @@ function FindPartnerPage() {
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{saved.size}</div>
-              <div className="l">Saved</div>
+              <div className="n">{matchesPlayed}</div>
+              <div className="l">Matches Played</div>
+            </div>
+            <div className="stat-divider" />
+            <div className="stat">
+              <div className="n">{upcomingCount}</div>
+              <div className="l">Upcoming</div>
             </div>
           </div>
         </header>
@@ -649,8 +661,8 @@ function FindPartnerPage() {
           <div className="results-title">
             <span>Top Matches</span>
             <span className="results-count">
-              {visiblePlayers.length} found {dataSource === "live" ? "via backend" : "in Chicago (demo)"}
-              {apiError && " · backend offline, showing demo"}
+              {visiblePlayers.length} {visiblePlayers.length === 1 ? "match" : "matches"}
+              {dataSource === "demo" && " · showing examples while offline"}
             </span>
           </div>
           <div className="sort-row" role="group" aria-label="Sort matches">
