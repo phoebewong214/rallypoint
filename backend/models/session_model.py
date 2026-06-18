@@ -43,22 +43,36 @@ class Session(db.Model):
     guest = db.relationship("User", foreign_keys=[guest_id])
     court = db.relationship("Court")
 
+    # An open invite is stored as PENDING; the host (whoever proposed the
+    # current time) is "awaiting", the guest is the one who must respond.
+    _OPEN = (SessionStatus.PENDING.value, SessionStatus.REQUESTED.value)
+
     def bucket(self, viewer_id: int) -> str:
         """Bucket a session for a given viewer (host or guest)."""
         if self.status == SessionStatus.COMPLETED.value:
             return SessionBucket.PAST.value
+        if self.status == SessionStatus.CANCELLED.value:
+            return SessionBucket.PAST.value
         if self.status == SessionStatus.CONFIRMED.value:
             return SessionBucket.UPCOMING.value
-        if self.status == SessionStatus.REQUESTED.value and viewer_id == self.guest_id:
+        # open invite: the responder (guest) sees it as an incoming request
+        if self.status in self._OPEN and viewer_id == self.guest_id:
             return SessionBucket.REQUESTS.value
-        return SessionBucket.UPCOMING.value  # pending invites show under upcoming
+        return SessionBucket.UPCOMING.value  # the proposer's outbound invite
+
+    def display_status(self, viewer_id: int) -> str:
+        """Viewer-relative status: an open invite reads as 'requested' to the
+        responder (guest) and 'pending' to the proposer (host)."""
+        if self.status in self._OPEN:
+            return "requested" if viewer_id == self.guest_id else "pending"
+        return self.status
 
     def to_dict(self, viewer_id: int) -> dict:
         opp = self.guest if viewer_id == self.host_id else self.host
         return {
             "id": self.id,
             "bucket": self.bucket(viewer_id),
-            "status": self.status,
+            "status": self.display_status(viewer_id),
             "opp": opp.name if opp else None,
             "oppHandle": opp.handle if opp else None,
             "sentByMe": self.host_id == viewer_id,

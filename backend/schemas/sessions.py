@@ -8,3 +8,8 @@ class CreateSessionSchema(BaseModel):
     sport: Literal["Tennis", "Pickleball"]
     scheduledAt: datetime
     note: Optional[str] = Field(default=None, max_length=500)
+
+
+class RescheduleSessionSchema(BaseModel):
+    scheduledAt: datetime
+    note: Optional[str] = Field(default=None, max_length=500)
