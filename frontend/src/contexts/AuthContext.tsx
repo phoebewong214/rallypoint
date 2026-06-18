@@ -26,6 +26,7 @@ export interface AuthState {
   signup: (data: SignupInput) => Promise<User>;
   logout: () => void;
   logoutEverywhere: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
   updateProfile: (patch: ProfilePatch) => Promise<User>;
 }
 
@@ -141,6 +142,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [persist]
   );
 
+  /* Re-pull the current user from the server (e.g. after email verification
+     flips emailVerified). Clears local state if the session is gone. */
+  const refreshUser = useCallback(async () => {
+    try {
+      const { user: fresh } = await authApi.me();
+      persist(fresh);
+      return fresh;
+    } catch {
+      persist(null);
+      return null;
+    }
+  }, [persist]);
+
   const updateProfile = useCallback(async (patch: ProfilePatch) => {
     const { user: fresh } = await authApi.updateMe(patch);
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(fresh));
@@ -157,9 +171,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signup,
       logout,
       logoutEverywhere,
+      refreshUser,
       updateProfile,
     }),
-    [user, isLoading, login, signup, logout, logoutEverywhere, updateProfile]
+    [user, isLoading, login, signup, logout, logoutEverywhere, refreshUser, updateProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

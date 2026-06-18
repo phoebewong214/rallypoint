@@ -11,7 +11,7 @@ type Status = "verifying" | "success" | "error";
 
 function VerifyEmailPage() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshUser } = useAuth();
   const [params] = useSearchParams();
   const token = params.get("token") || "";
   const [status, setStatus] = useState<Status>(token ? "verifying" : "error");
@@ -25,12 +25,17 @@ function VerifyEmailPage() {
     ran.current = true; // guard against StrictMode double-invoke
     authApi
       .verifyEmail(token)
-      .then(() => setStatus("success"))
+      .then(() => {
+        setStatus("success");
+        // If this user is logged in, refresh so emailVerified flips and the
+        // ProtectedRoute gate opens.
+        refreshUser().catch(() => {});
+      })
       .catch((err: any) => {
         setStatus("error");
         setMessage(err?.message || "This verification link is invalid or has expired.");
       });
-  }, [token]);
+  }, [token, refreshUser]);
 
   return (
     <>

@@ -54,18 +54,43 @@ function LoginPage() {
   const [locating, setLocating] = useState(false);
   const [locStatus, setLocStatus] = useState<"" | "ok" | "denied" | "unsupported" | "error">("");
 
+  // Turn coordinates into a "City, ST" string for the visible Location field.
+  // BigDataCloud's reverse-geocode-client endpoint is free and keyless.
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
+      );
+      if (!res.ok) return;
+      const d = await res.json();
+      const city = d.city || d.locality || d.principalSubdivision || "";
+      const region = d.principalSubdivisionCode?.split("-")?.[1] || d.principalSubdivision || "";
+      const label = [city, region].filter(Boolean).join(", ");
+      if (label) setForm((f) => ({ ...f, location: f.location || label }));
+    } catch {
+      /* keep coords; user can type the city manually */
+    }
+  };
+
   const handleUseMyLocation = () => {
     if (!("geolocation" in navigator)) {
       setLocStatus("unsupported");
+      return;
+    }
+    if (!window.isSecureContext) {
+      // Browsers only expose geolocation over https or localhost.
+      setLocStatus("error");
       return;
     }
     setLocating(true);
     setLocStatus("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setForm((f) => ({ ...f, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        const { latitude, longitude } = pos.coords;
+        setForm((f) => ({ ...f, lat: latitude, lng: longitude }));
         setLocStatus("ok");
         setLocating(false);
+        reverseGeocode(latitude, longitude);
       },
       (err) => {
         setLocStatus(err.code === err.PERMISSION_DENIED ? "denied" : "error");
