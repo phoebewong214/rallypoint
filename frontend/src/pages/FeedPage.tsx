@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { TopNav, Icon, Avatar } from "../rally-shared";
+import { TopNav, Icon, Avatar, ratingLabel } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 
@@ -111,13 +111,15 @@ const ActivityTag = ({ type }) => {
   );
 };
 
-const MatchEmbed = ({ match }) => (
+const MatchEmbed = ({ match, sport }: { match: any; sport?: string }) => {
+  const label = ratingLabel(sport);
+  return (
   <div className="match-embed">
     <div className="me-side">
       <Avatar name={match.left.name} initials={match.left.inits} size="sm" />
       <div style={{ minWidth: 0 }}>
         <div className="me-name">{match.left.name}</div>
-        <div className="me-sub">NTRP {match.left.ntrp}</div>
+        <div className="me-sub">{label} {match.left.ntrp}</div>
         {match.left.win ? <span className="me-win-tag">WIN</span> : <span className="me-loss-tag">LOSS</span>}
       </div>
     </div>
@@ -129,12 +131,13 @@ const MatchEmbed = ({ match }) => (
       <Avatar name={match.right.name} initials={match.right.inits} size="sm" />
       <div style={{ minWidth: 0 }}>
         <div className="me-name">{match.right.name}</div>
-        <div className="me-sub">NTRP {match.right.ntrp}</div>
+        <div className="me-sub">{label} {match.right.ntrp}</div>
         {match.right.win ? <span className="me-win-tag">WIN</span> : <span className="me-loss-tag">LOSS</span>}
       </div>
     </div>
   </div>
-);
+  );
+};
 
 function FeedCard({ item, onLike, onSoon }: { item: any; onLike: (id: number) => void; onSoon: (f: string) => void }) {
   return (
@@ -162,7 +165,7 @@ function FeedCard({ item, onLike, onSoon }: { item: any; onLike: (id: number) =>
       <div className="feed-body">
         <p className="feed-text">{item.text}</p>
 
-        {item.match && <MatchEmbed match={item.match} />}
+        {item.match && <MatchEmbed match={item.match} sport={item.sub} />}
 
         {item.lfg && (
           <div className="lfg-chips">
@@ -190,8 +193,8 @@ function FeedCard({ item, onLike, onSoon }: { item: any; onLike: (id: number) =>
             <div className="np-text">
               <h4 className="np-title">{item.newPlayer.name}</h4>
               <div className="np-badges">
-                <span className="badge skill">NTRP {item.newPlayer.ntrp}</span>
-                <span className="badge sport"><Icon name="paddle" size={11} /> {item.newPlayer.sport}</span>
+                <span className="badge skill">{ratingLabel(item.newPlayer.sport)} {item.newPlayer.ntrp}</span>
+                <span className="badge sport">{item.newPlayer.sport}</span>
                 <span className="badge"><Icon name="pin" size={11} /> {item.newPlayer.area}</span>
               </div>
             </div>
@@ -446,7 +449,7 @@ function FeedPage() {
                     <Avatar name={s.name} initials={s.inits} size="sm" />
                     <div className="sug-info">
                       <p className="sug-name">{s.name}</p>
-                      <span className="sug-meta">NTRP {s.ntrp} · {s.distance}</span>
+                      <span className="sug-meta">{ratingLabel(s.sport)} {s.ntrp} · {s.distance}</span>
                     </div>
                     <button
                       type="button"

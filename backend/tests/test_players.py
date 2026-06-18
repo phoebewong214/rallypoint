@@ -16,22 +16,7 @@ def _seed_partner(client, email="partner@rally.app", sport="Pickleball", ntrp="3
         },
     )
     assert rsp.status_code == 201
-
-    # Manually add a sport profile (signup creates the user but no profile row yet).
-    # Use the app context to write via SQLAlchemy.
-    from extensions import db
-    from models import User, SportProfile
-
-    u = User.query.filter_by(email=email).first()
-    db.session.add(
-        SportProfile(
-            user_id=u.id,
-            sport=sport,
-            ntrp=ntrp,
-            availability_summary="Weekends, mornings",
-        )
-    )
-    db.session.commit()
+    # Signup now creates the matching SportProfile (sport + ntrp) automatically.
 
 
 def test_players_requires_auth(client):
@@ -45,24 +30,11 @@ def test_players_returns_empty_when_nobody_else_exists(client, auth_headers):
     assert rsp.get_json() == {"players": [], "count": 0}
 
 
-def test_players_lists_matching_candidates(client, auth_headers, app):
-    """Seed a fellow pickleball player and verify they show up with a score+reason."""
-    with app.app_context():
-        # Give the test viewer their own SportProfile too so matching has something to compare
-        from extensions import db
-        from models import User, SportProfile
-
-        me = User.query.filter_by(email="fixture@rally.app").first()
-        db.session.add(
-            SportProfile(
-                user_id=me.id,
-                sport="Pickleball",
-                ntrp="3.5",
-                availability_summary="Weekends, mornings",
-            )
-        )
-        db.session.commit()
-        _seed_partner(client)
+def test_players_lists_matching_candidates(client, auth_headers):
+    """Seed a fellow pickleball player and verify they show up with a score+reason.
+    Both the viewer (auth_headers fixture) and the partner get their Pickleball
+    SportProfile automatically at signup."""
+    _seed_partner(client)
 
     rsp = client.get("/api/players?sport=Pickleball", headers=auth_headers)
     assert rsp.status_code == 200

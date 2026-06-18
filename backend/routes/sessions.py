@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify
 from sqlalchemy import or_
 
 from extensions import db
-from models import Session, SessionStatus
+from models import Session, SessionStatus, User
 from schemas import CreateSessionSchema
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
@@ -30,6 +30,10 @@ def list_sessions():
 def create_session():
     viewer = current_user()
     data = parse_json(CreateSessionSchema)
+    if data.guestId == viewer.id:
+        return jsonify({"error": "You can't start a session with yourself"}), 400
+    if not User.query.get(data.guestId):
+        return jsonify({"error": "That player no longer exists"}), 404
     s = Session(
         host_id=viewer.id,
         guest_id=data.guestId,

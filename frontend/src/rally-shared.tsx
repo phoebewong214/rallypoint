@@ -1,8 +1,8 @@
 /* ============================================================
    RallyPoint — Shared React components (Icons + Avatar + TopNav)
    ============================================================ */
-import React, { SVGProps } from "react";
-import { Link, NavLink } from "react-router-dom";
+import React, { SVGProps, useEffect, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import type { IconName, NavId } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
@@ -12,6 +12,10 @@ type IconProps = SVGProps<SVGSVGElement> & {
   size?: number;
   stroke?: number;
 };
+
+/* Tennis uses NTRP; pickleball uses DUPR. Accepts mixed-case sport names. */
+export const ratingLabel = (sport?: string | null): "NTRP" | "DUPR" =>
+  (sport ?? "").toLowerCase().startsWith("tennis") ? "NTRP" : "DUPR";
 
 export const Icon: React.FC<IconProps> = ({ name, size = 16, stroke = 2, ...p }) => {
   const common = {
@@ -38,8 +42,6 @@ export const Icon: React.FC<IconProps> = ({ name, size = 16, stroke = 2, ...p })
     case "bookmark": return <svg {...common}><path d="M19 21 12 16l-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>;
     case "check":    return <svg {...common}><path d="m5 12 5 5 9-11"/></svg>;
     case "calendar": return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>;
-    case "tennis":   return <svg {...common}><circle cx="12" cy="12" r="9"/><path d="M3.5 8.5c4 1 7 4 8 8M20.5 8.5c-4 1-7 4-8 8"/></svg>;
-    case "paddle":   return <svg {...common}><ellipse cx="13" cy="8" rx="6.5" ry="5"/><path d="M8 13 4 21"/><path d="m10 14 4-4"/></svg>;
     case "mail":     return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>;
     case "lock":     return <svg {...common}><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>;
     case "user":     return <svg {...common}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
@@ -62,6 +64,7 @@ export const Icon: React.FC<IconProps> = ({ name, size = 16, stroke = 2, ...p })
     case "bell":     return <svg {...common}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>;
     case "sun":      return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>;
     case "moon":     return <svg {...common}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
+    case "menu":     return <svg {...common}><path d="M3 6h18M3 12h18M3 18h18"/></svg>;
     default: return null;
   }
 };
@@ -150,14 +153,28 @@ const NAV_LINKS: NavLinkDef[] = [
 export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) => {
   const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
+  const location = useLocation();
   const showUser = !hideUser && !!user;
+
+  // Mobile hamburger menu — collapses nav links + user controls into a drawer.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Close the drawer whenever the route changes (e.g., user tapped a link).
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [menuOpen]);
 
   return (
     <nav className="nav">
       <div className="nav-inner">
-        <Link className="logo" to={user ? "/find" : "/"}>
-          <div className="logo-mark">R</div>
-          RallyPoint
+        <Link className="logo" to={user ? "/find" : "/"} aria-label="RallyPoint home">
+          <img src="/logo.png" alt="RallyPoint" className="logo-img" />
         </Link>
         {!hideLinks && (
           <div className="nav-links">
@@ -176,7 +193,9 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
           </div>
         )}
         <div className="nav-spacer" />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+
+        {/* Desktop controls (hidden on small screens via CSS) */}
+        <div className="nav-desktop-controls">
           <button
             type="button"
             onClick={toggleTheme}
@@ -208,7 +227,74 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
             </Link>
           )}
         </div>
+
+        {/* Mobile: just the avatar + hamburger */}
+        <div className="nav-mobile-controls">
+          {showUser && user && (
+            <Link to="/profile" className="nav-avatar" aria-label="Open profile">
+              {user.initials}
+            </Link>
+          )}
+          <button
+            type="button"
+            className="btn-icon-sq nav-burger"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <Icon name={menuOpen ? "x" : "menu"} size={18} />
+          </button>
+        </div>
       </div>
+
+      {/* Mobile slide-down drawer */}
+      {menuOpen && (
+        <>
+          <div className="nav-drawer-backdrop" onClick={() => setMenuOpen(false)} />
+          <div className="nav-drawer" role="dialog" aria-label="Navigation menu">
+            {!hideLinks && (
+              <div className="nav-drawer-links">
+                {NAV_LINKS.map((l) => (
+                  <NavLink
+                    key={l.id}
+                    to={l.to}
+                    end
+                    className={({ isActive }) =>
+                      "nav-drawer-link" + (active === l.id || isActive ? " active" : "")
+                    }
+                  >
+                    {l.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+            <div className="nav-drawer-foot">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="btn-ghost full"
+              >
+                <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </button>
+              {showUser && user ? (
+                <button
+                  type="button"
+                  onClick={() => { logout(); setMenuOpen(false); }}
+                  className="btn-ghost full"
+                >
+                  <Icon name="logout" size={15} />
+                  Sign out
+                </button>
+              ) : (
+                <Link to="/" className="btn-primary full" onClick={() => setMenuOpen(false)}>
+                  Sign In
+                </Link>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </nav>
   );
 };

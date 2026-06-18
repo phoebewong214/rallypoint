@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# R
+.Rhistory
+
 # Dependencies
 node_modules/
 .pnp/

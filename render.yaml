@@ -1,0 +1,46 @@
+# Render Blueprint — deploys the Flask API + a managed Postgres.
+# In Render: New → Blueprint → pick this repo. It reads this file.
+# Frontend is deployed separately on Vercel (see DEPLOY.md).
+databases:
+  - name: rallypoint-db
+    plan: free          # NOTE: Render's free Postgres expires ~30 days; upgrade for real use.
+
+services:
+  - type: web
+    name: rallypoint-api
+    runtime: python
+    plan: free          # NOTE: free web services sleep after inactivity (first request is slow).
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true                 # Render generates a strong secret
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rallypoint-db
+          property: connectionString
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: Lax
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "true"
+      # --- fill these in the Render dashboard (Environment tab) ---
+      - key: APP_BASE_URL          # e.g. https://app.yourdomain.com
+        sync: false
+      - key: CORS_ORIGINS          # e.g. https://app.yourdomain.com
+        sync: false
+      - key: COOKIE_DOMAIN         # e.g. .yourdomain.com  (shares cookie across subdomains)
+        sync: false
+      - key: SMTP_HOST             # smtp.resend.com
+        sync: false
+      - key: SMTP_USER             # resend
+        sync: false
+      - key: SMTP_PASSWORD         # your Resend API key (re_...)
+        sync: false
+      - key: SMTP_FROM             # RallyPoint <no-reply@yourdomain.com>
+        sync: false

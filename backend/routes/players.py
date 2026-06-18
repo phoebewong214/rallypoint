@@ -67,7 +67,7 @@ def list_players():
         if not (ntrp_lo <= n <= ntrp_hi):
             continue
 
-        score, reason = score_and_reason(viewer, cand, sport)
+        score, reason, dist_miles = score_and_reason(viewer, cand, sport)
 
         log = AIMatchLog.query.filter_by(
             viewer_id=viewer.id, candidate_id=cand.id, sport=sport
@@ -95,7 +95,7 @@ def list_players():
                 "color": cand.avatar_color,
                 "fg": cand.avatar_fg,
                 "location": cand.location,
-                "distance": "1.0",  # TODO: Haversine vs viewer when geocoded
+                "distance": f"{dist_miles:.1f}" if dist_miles is not None else "—",
                 "online": False,
                 "tennis": cand.profile_for("Tennis").to_dict() if cand.profile_for("Tennis") else None,
                 "pickleball": cand.profile_for("Pickleball").to_dict() if cand.profile_for("Pickleball") else None,
