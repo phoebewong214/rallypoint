@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
-import { useCreateSession } from "../hooks/useSessions";
+import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -245,6 +246,23 @@ function NTRPRange({ value, onChange, label }: { value: [number, number]; onChan
     };
   }, [drag, handlePointer]);
 
+  // Keyboard support: arrows nudge by STEP, Home/End jump to the bound.
+  const nudge = (which: "lo" | "hi") => (e: React.KeyboardEvent) => {
+    const deltas: Record<string, number> = {
+      ArrowRight: STEP, ArrowUp: STEP, ArrowLeft: -STEP, ArrowDown: -STEP,
+    };
+    const delta = deltas[e.key];
+    if (delta === undefined && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    if (which === "lo") {
+      const v = e.key === "Home" ? MIN : e.key === "End" ? value[1] - STEP : value[0] + delta;
+      onChange([Math.max(MIN, Math.min(v, value[1] - STEP)), value[1]]);
+    } else {
+      const v = e.key === "Home" ? value[0] + STEP : e.key === "End" ? MAX : value[1] + delta;
+      onChange([value[0], Math.min(MAX, Math.max(v, value[0] + STEP))]);
+    }
+  };
+
   return (
     <div>
       <div className="slider-wrap">
@@ -253,11 +271,27 @@ function NTRPRange({ value, onChange, label }: { value: [number, number]; onChan
           <div
             className={"slider-thumb" + (drag === "lo" ? " active" : "")}
             style={{ left: `${loPct}%` }}
+            role="slider"
+            tabIndex={0}
+            aria-label={`${label} minimum`}
+            aria-valuemin={MIN}
+            aria-valuemax={MAX}
+            aria-valuenow={value[0]}
+            aria-valuetext={`${label} ${value[0].toFixed(1)}`}
+            onKeyDown={nudge("lo")}
             onPointerDown={(e) => { e.preventDefault(); setDrag("lo"); }}
           />
           <div
             className={"slider-thumb" + (drag === "hi" ? " active" : "")}
             style={{ left: `${hiPct}%` }}
+            role="slider"
+            tabIndex={0}
+            aria-label={`${label} maximum`}
+            aria-valuemin={MIN}
+            aria-valuemax={MAX}
+            aria-valuenow={value[1]}
+            aria-valuetext={`${label} ${value[1].toFixed(1)}`}
+            onKeyDown={nudge("hi")}
             onPointerDown={(e) => { e.preventDefault(); setDrag("hi"); }}
           />
         </div>
@@ -276,17 +310,23 @@ function FilterBar({ filters, setFilters, onFind }) {
   return (
     <div className="filter-bar">
       <div className="field">
-        <label className="field-label">
+        <label className="field-label" id="sport-label">
           <Icon name="trophy" size={13} /> Sport
         </label>
-        <div className="pill-group" role="tablist">
+        <div className="pill-group" role="radiogroup" aria-labelledby="sport-label">
           <button
+            type="button"
+            role="radio"
+            aria-checked={filters.sport === "Pickleball"}
             className={"pill" + (filters.sport === "Pickleball" ? " active" : "")}
             onClick={() => setSport("Pickleball")}
           >
             Pickleball
           </button>
           <button
+            type="button"
+            role="radio"
+            aria-checked={filters.sport === "Tennis"}
             className={"pill" + (filters.sport === "Tennis" ? " active" : "")}
             onClick={() => setSport("Tennis")}
           >
@@ -307,11 +347,12 @@ function FilterBar({ filters, setFilters, onFind }) {
       </div>
 
       <div className="field">
-        <label className="field-label">
+        <label className="field-label" htmlFor="time-select">
           <Icon name="clock" size={13} /> Preferred Time
         </label>
         <div className="select">
           <select
+            id="time-select"
             value={filters.time}
             onChange={(e) => setFilters((f) => ({ ...f, time: e.target.value }))}
           >
@@ -325,7 +366,7 @@ function FilterBar({ filters, setFilters, onFind }) {
         </div>
       </div>
 
-      <button className="btn-find" onClick={onFind}>
+      <button type="button" className="btn-find" onClick={onFind}>
         <Icon name="search" size={16} stroke={2.5} />
         Find Partners
       </button>
@@ -421,20 +462,45 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
   );
 }
 
+// Maps the "Preferred Time" option to keywords matched against a player's
+// availability text (e.g. "Weekday evenings", "Sat AM").
+const TIME_KEYWORDS: Record<string, string[]> = {
+  Morning: ["morning", "sat am", "early"],
+  Afternoon: ["afternoon", "lunch"],
+  Evening: ["evening", "weeknight", "night"],
+  Weekend: ["weekend", "saturday", "sunday", "sat", "sun"],
+};
+
 function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
-  const [filters, setFilters] = useState({
-    sport: "Pickleball",
-    ntrp: [3.0, 4.0],
-    time: "Any time",
-  });
-  const myRatingLabel = ratingLabel(authUser?.primarySport ?? filters.sport);
-  const myRating = authUser?.ntrp ?? "3.5";
+  type Filters = { sport: Sport; ntrp: [number, number]; time: string };
+  const DEFAULT_FILTERS: Filters = { sport: "Pickleball", ntrp: [3.0, 4.0], time: "Any time" };
+  // `filters` is the draft the user edits; `applied` is what actually drives the
+  // query + results. Editing no longer spams the backend — the "Find Partners"
+  // button commits the draft.
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [applied, setApplied] = useState<Filters>(DEFAULT_FILTERS);
+
+  const myRatingLabel = ratingLabel(applied.sport);
+  // Real NTRP/DUPR for the searched sport, read from the user's sport profiles
+  // (the /me payload includes sportProfiles); "—" when they have none yet.
+  const myProfiles = (authUser as any)?.sportProfiles as
+    | { sport?: string; ntrp?: string }[]
+    | undefined;
+  const myRating =
+    myProfiles?.find((p) => (p.sport || "").toLowerCase() === applied.sport.toLowerCase())?.ntrp ??
+    "—";
   const [requested, setRequested] = useState(new Set());
   const [saved, setSaved] = useState(new Set());
   const [sort, setSort] = useState("match");
+
+  // Real activity stats from the user's sessions.
+  const { data: sessionsData } = useSessions();
+  const sessions = sessionsData?.sessions ?? [];
+  const matchesPlayed = sessions.filter((s) => s.status === "completed").length;
+  const upcomingCount = sessions.filter((s) => s.bucket === "upcoming").length;
 
   /* ---- Real backend matches via /api/players ----
      Falls back to the local demo data below when the backend
@@ -442,85 +508,74 @@ function FindPartnerPage() {
   const {
     data: apiData,
     isLoading: apiLoading,
-    isError: apiError,
   } = usePlayers({
-    sport: filters.sport,
-    ntrpMin: filters.ntrp[0],
-    ntrpMax: filters.ntrp[1],
+    sport: applied.sport,
+    ntrpMin: applied.ntrp[0],
+    ntrpMax: applied.ntrp[1],
   });
-  const liveMatches = apiData?.players?.length ? apiData.players : null;
+  // `liveMatches` is the array the backend returned — which may be EMPTY (a
+  // real "no matches" answer). It's null only when the backend never responded
+  // (loading or unreachable). We must NOT treat an empty live result as "demo",
+  // or real users with no matches would see fabricated players.
+  const liveMatches = apiData ? apiData.players : null;
   const dataSource: "live" | "demo" = liveMatches ? "live" : "demo";
 
   const visiblePlayers = useMemo(() => {
-    /* Live (API) branch — backend already filtered + scored. */
-    if (liveMatches) {
-      const projected = liveMatches.map((p) => {
-        const activeKey = filters.sport === "Pickleball" ? "pickleball" : "tennis";
-        const otherKey = activeKey === "pickleball" ? "tennis" : "pickleball";
-        const otherSportLabel = activeKey === "pickleball" ? "Tennis" : "Pickleball";
-        const altProf = (p as any)[otherKey];
-        return {
-          id: p.id,
-          name: p.name,
-          initials: p.initials,
-          color: p.color,
-          fg: p.fg,
-          online: p.online,
-          location: p.location,
-          distance: p.distance,
-          sport: filters.sport,
-          ntrp: p.ntrp,
-          availability: p.availability,
-          matchScore: p.matchScore,
-          reason: p.reason,
-          altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
-        };
-      });
-      if (sort === "distance") projected.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-      else if (sort === "skill") projected.sort((a, b) => parseFloat(b.ntrp) - parseFloat(a.ntrp));
-      else projected.sort((a, b) => b.matchScore - a.matchScore);
-      return projected;
-    }
-
-    /* Demo branch — rich local seed data for when backend isn't running. */
-    const activeKey = filters.sport === "Pickleball" ? "pickleball" : "tennis";
+    const activeKey = applied.sport === "Pickleball" ? "pickleball" : "tennis";
     const otherKey = activeKey === "pickleball" ? "tennis" : "pickleball";
     const otherSportLabel = activeKey === "pickleball" ? "Tennis" : "Pickleball";
 
-    const projected = PLAYERS
-      .filter((p) => p[activeKey])
-      .map((p) => {
-        const prof = p[activeKey];
-        const alt = p[otherKey]
-          ? { sport: otherSportLabel, ntrp: p[otherKey].ntrp }
-          : null;
+    let projected: any[];
+    if (liveMatches) {
+      /* Live (API) branch — backend already filtered + scored. */
+      projected = liveMatches.map((p) => {
+        const altProf = (p as any)[otherKey];
         return {
-          id: p.id,
-          name: p.name,
-          initials: p.initials,
-          color: p.color,
-          fg: p.fg,
-          online: p.online,
-          location: p.location,
-          distance: p.distance,
-          sport: filters.sport,
-          ntrp: prof.ntrp,
-          availability: prof.availability,
-          matchScore: prof.matchScore,
-          reason: prof.reason,
-          altSport: alt,
+          id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
+          online: p.online, location: p.location, distance: p.distance,
+          sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
+          matchScore: p.matchScore, reason: p.reason,
+          altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
-      })
-      .filter((p) => {
-        const n = parseFloat(p.ntrp);
-        return n >= filters.ntrp[0] && n <= filters.ntrp[1];
       });
+    } else {
+      /* Demo branch — local seed data for when the backend is unreachable. */
+      projected = PLAYERS
+        .filter((p) => p[activeKey])
+        .map((p) => {
+          const prof = p[activeKey];
+          const alt = p[otherKey] ? { sport: otherSportLabel, ntrp: p[otherKey].ntrp } : null;
+          return {
+            id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
+            online: p.online, location: p.location, distance: p.distance,
+            sport: applied.sport, ntrp: prof.ntrp, availability: prof.availability,
+            matchScore: prof.matchScore, reason: prof.reason, altSport: alt,
+          };
+        })
+        .filter((p) => {
+          const n = parseFloat(p.ntrp);
+          return n >= applied.ntrp[0] && n <= applied.ntrp[1];
+        });
+    }
 
-    if (sort === "match") projected.sort((a, b) => b.matchScore - a.matchScore);
-    else if (sort === "distance") projected.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    /* Preferred-time filter — matched against each player's availability text. */
+    if (applied.time !== "Any time") {
+      const kw = TIME_KEYWORDS[applied.time] ?? [];
+      projected = projected.filter((p) => {
+        const a = (p.availability || "").toLowerCase();
+        return kw.some((k) => a.includes(k));
+      });
+    }
+
+    const distNum = (d: string) => {
+      const n = parseFloat(d);
+      return Number.isFinite(n) ? n : Infinity; // unknown distance ("—") sorts last
+    };
+    if (sort === "distance") projected.sort((a, b) => distNum(a.distance) - distNum(b.distance));
     else if (sort === "skill") projected.sort((a, b) => parseFloat(b.ntrp) - parseFloat(a.ntrp));
+    else projected.sort((a, b) => b.matchScore - a.matchScore);
     return projected;
-  }, [liveMatches, filters.sport, filters.ntrp, sort]);
+  }, [liveMatches, applied.sport, applied.ntrp, applied.time, sort]);
 
   const toggle = (set, setter) => (id) => {
     const next = new Set(set);
@@ -565,31 +620,33 @@ function FindPartnerPage() {
           <div>
             <div className="eyebrow">
               <span className="dot" />
-              {apiLoading
-                ? "Loading live matches…"
-                : dataSource === "live"
-                  ? `Live · backend AI matched ${liveMatches!.length} player${liveMatches!.length === 1 ? "" : "s"}`
-                  : `Demo · ${PLAYERS.filter((p) => p.online).length} players online`}
+              {apiLoading && !liveMatches
+                ? "Finding your matches…"
+                : dataSource === "demo"
+                  ? "Showing example players while we reconnect"
+                  : visiblePlayers.length === 0
+                    ? "No partners match these filters yet"
+                    : `${visiblePlayers.length} partner${visiblePlayers.length === 1 ? "" : "s"} matched on skill & schedule`}
             </div>
             <h1 className="h1">Find your next <em>rally partner.</em></h1>
             <p className="sub">
-              Matched on skill, schedule, and court proximity across Chicago. Powered by your play history.
+              Matched on skill, schedule, and court proximity across Chicago.
             </p>
           </div>
           <div className="stats">
-            <div className="stat">
-              <div className="n">12</div>
-              <div className="l">Matches Played</div>
-            </div>
-            <div className="stat-divider" />
             <div className="stat">
               <div className="n">{myRating}</div>
               <div className="l">Your {myRatingLabel}</div>
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">8</div>
-              <div className="l">Saved</div>
+              <div className="n">{matchesPlayed}</div>
+              <div className="l">Matches Played</div>
+            </div>
+            <div className="stat-divider" />
+            <div className="stat">
+              <div className="n">{upcomingCount}</div>
+              <div className="l">Upcoming</div>
             </div>
           </div>
         </header>
@@ -597,18 +654,18 @@ function FindPartnerPage() {
         <FilterBar
           filters={filters}
           setFilters={setFilters}
-          onFind={() => {}}
+          onFind={() => setApplied(filters)}
         />
 
         <div className="results-head">
           <div className="results-title">
             <span>Top Matches</span>
             <span className="results-count">
-              {visiblePlayers.length} found {dataSource === "live" ? "via backend" : "in Chicago (demo)"}
-              {apiError && " · backend offline, showing demo"}
+              {visiblePlayers.length} {visiblePlayers.length === 1 ? "match" : "matches"}
+              {dataSource === "demo" && " · showing examples while offline"}
             </span>
           </div>
-          <div className="sort-row">
+          <div className="sort-row" role="group" aria-label="Sort matches">
             <span>Sort:</span>
             {[
               ["match", "Best match"],
@@ -617,6 +674,8 @@ function FindPartnerPage() {
             ].map(([k, l]) => (
               <button
                 key={k}
+                type="button"
+                aria-pressed={sort === k}
                 className={"sort-chip" + (sort === k ? " active" : "")}
                 onClick={() => setSort(k)}
               >
@@ -626,20 +685,46 @@ function FindPartnerPage() {
           </div>
         </div>
 
-        <div className="grid">
-          {apiLoading && !liveMatches
-            ? Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)
-            : visiblePlayers.map((p) => (
-                <PlayerCard
-                  key={p.id}
-                  player={p}
-                  requested={requested.has(p.id)}
-                  saved={saved.has(p.id)}
-                  onRequest={handleRequest}
-                  onSave={toggle(saved, setSaved)}
-                />
-              ))}
-        </div>
+        {apiLoading && !liveMatches ? (
+          <div className="grid">
+            {Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)}
+          </div>
+        ) : dataSource === "live" && visiblePlayers.length === 0 ? (
+          <div
+            role="status"
+            style={{ textAlign: "center", padding: "64px 24px", maxWidth: 440, margin: "0 auto" }}
+          >
+            <div
+              style={{
+                width: 56, height: 56, borderRadius: "50%", margin: "0 auto 18px",
+                display: "grid", placeItems: "center",
+                background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)",
+              }}
+            >
+              <Icon name="search" size={24} />
+            </div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>
+              No partners match these filters yet
+            </h3>
+            <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+              Try widening your skill range or switching sport. More players are joining
+              RallyPoint across Chicago every week — check back soon.
+            </p>
+          </div>
+        ) : (
+          <div className="grid">
+            {visiblePlayers.map((p) => (
+              <PlayerCard
+                key={p.id}
+                player={p}
+                requested={requested.has(p.id)}
+                saved={saved.has(p.id)}
+                onRequest={handleRequest}
+                onSave={toggle(saved, setSaved)}
+              />
+            ))}
+          </div>
+        )}
       </main>
     </>
   );
