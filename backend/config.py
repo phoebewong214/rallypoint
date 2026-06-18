@@ -9,10 +9,18 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def _normalize_db_url(url: str) -> str:
+    # Managed Postgres (Render/Heroku/etc.) hand out "postgres://", but
+    # SQLAlchemy 2.x + psycopg2 require the "postgresql://" scheme.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    return url
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-not-for-prod")
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL", f"sqlite:///{BASE_DIR / 'rallypoint.db'}"
+    SQLALCHEMY_DATABASE_URI = _normalize_db_url(
+        os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'rallypoint.db'}")
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CORS_ORIGINS = [
