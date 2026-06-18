@@ -24,6 +24,7 @@ export interface AuthState {
   login: (email: string, password: string) => Promise<User>;
   signup: (data: SignupInput) => Promise<User>;
   logout: () => void;
+  logoutEverywhere: () => Promise<void>;
   updateProfile: (patch: ProfilePatch) => Promise<User>;
 }
 
@@ -40,6 +41,9 @@ export interface SignupInput {
   password: string;
   sport: "Tennis" | "Pickleball";
   ntrp: string;
+  location?: string;
+  lat?: number;
+  lng?: number;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -69,6 +73,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(() => persist(null, null), [persist]);
+
+  /* Revoke all sessions server-side, then clear locally. We clear regardless
+     of the API outcome so the user is always logged out on this device. */
+  const logoutEverywhere = useCallback(async () => {
+    try {
+      await authApi.logoutAll();
+    } finally {
+      persist(null, null);
+    }
+  }, [persist]);
 
   /* On mount: if we have a token, validate it via /me. */
   useEffect(() => {
@@ -147,9 +161,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login,
       signup,
       logout,
+      logoutEverywhere,
       updateProfile,
     }),
-    [user, isLoading, login, signup, logout, updateProfile]
+    [user, isLoading, login, signup, logout, logoutEverywhere, updateProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

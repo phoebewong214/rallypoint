@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import FindPartnerPage from "./pages/FindPartnerPage";
 import ProfilePage from "./pages/ProfilePage";
 import SessionsPage from "./pages/SessionsPage";
@@ -26,6 +28,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PublicOnly><LoginPage /></PublicOnly>} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/find"     element={<ProtectedRoute><FindPartnerPage /></ProtectedRoute>} />
           <Route path="/profile"  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/sessions" element={<ProtectedRoute><SessionsPage /></ProtectedRoute>} />
