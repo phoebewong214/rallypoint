@@ -12,7 +12,10 @@ services:
     plan: free          # NOTE: free web services sleep after inactivity (first request is slow).
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    # init-db runs at startup (idempotent create_all) so the schema exists on a
+    # fresh DB without needing Shell/Jobs (paid-only on Render's free tier). It
+    # runs at runtime where the internal DATABASE_URL is reachable.
+    startCommand: python manage.py init-db && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/health
     envVars:
       - key: SECRET_KEY
