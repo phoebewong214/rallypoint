@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "../rally-shared";
 import { Spinner } from "./Skeleton";
 
@@ -40,6 +40,17 @@ export function ScheduleModal({
   const [when, setWhen] = useState(() => defaultWhen(defaultISO));
   const [note, setNote] = useState("");
   const minWhen = toLocalInput(new Date());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Esc closes; focus lands on the date field when the dialog opens.
+  useEffect(() => {
+    inputRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +91,7 @@ export function ScheduleModal({
             <Icon name="calendar" size={13} /> Date &amp; time
           </label>
           <input
+            ref={inputRef}
             id="sched-when"
             className="input"
             type="datetime-local"

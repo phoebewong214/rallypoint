@@ -2,9 +2,14 @@
 Session = a booked / requested / completed match between two users.
 Named session_model.py to avoid shadowing flask.session.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 from extensions import db
+
+# A confirmed game stays in "Upcoming" until a few hours past its start time, so
+# a game that's currently being played doesn't vanish from the list the instant
+# the clock passes its scheduled time.
+PAST_GRACE = timedelta(hours=3)
 
 
 class SessionStatus(str, enum.Enum):
@@ -49,7 +54,7 @@ class Session(db.Model):
         Past (no result/score tracking)."""
         if self.status in (SessionStatus.COMPLETED.value, SessionStatus.CANCELLED.value):
             return SessionBucket.PAST.value
-        is_past = self.scheduled_at is not None and self.scheduled_at < datetime.utcnow()
+        is_past = self.scheduled_at is not None and self.scheduled_at < datetime.utcnow() - PAST_GRACE
         if self.status == SessionStatus.CONFIRMED.value:
             return SessionBucket.PAST.value if is_past else SessionBucket.UPCOMING.value
         # open invite

@@ -381,9 +381,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
   return (
     <article className="card">
       <div className="card-top">
-        <div className="avatar" style={{ background: player.color, color: player.fg }}>
+        <div className="avatar size-md" style={{ background: player.color, color: player.fg }}>
           {player.initials}
-          {player.online && <span className="online" title="Online" />}
         </div>
         <div className="name-wrap">
           <h3 className="name">{player.name}</h3>
@@ -391,8 +390,12 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
             <span className="badge skill">{ratingLabel(player.sport)} {player.ntrp}</span>
             <span className="badge sport">{player.sport}</span>
             {player.altSport && (
-              <span className="badge sport" title={`Also plays ${player.altSport.sport}`}>
-                + {player.altSport.sport} {ratingLabel(player.altSport.sport)} {player.altSport.ntrp}
+              <span
+                className="badge sport"
+                style={{ opacity: 0.6, fontWeight: 600 }}
+                title={`Also plays ${player.altSport.sport} at ${ratingLabel(player.altSport.sport)} ${player.altSport.ntrp}`}
+              >
+                also {player.altSport.sport} {player.altSport.ntrp}
               </span>
             )}
           </div>
@@ -424,7 +427,7 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
 
       <div
         className="ai-box"
-        title="Score = rating closeness + same primary sport + proximity (≤2 mi) + availability overlap"
+        title="Based on skill match, location, and schedule overlap"
       >
         <div className="ai-ico"><Icon name="sparkles" size={14} stroke={2.4} /></div>
         <div className="ai-content">
@@ -455,7 +458,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
         </button>
         <button
           className={"btn-icon" + (saved ? " active" : "")}
-          aria-label="Save"
+          aria-label={saved ? "Saved — tap to remove" : "Save player"}
+          aria-pressed={saved}
           onClick={() => onSave(player.id)}
         >
           <Icon name="bookmark" size={16} />
@@ -496,7 +500,23 @@ function FindPartnerPage() {
     myProfiles?.find((p) => (p.sport || "").toLowerCase() === applied.sport.toLowerCase())?.ntrp ??
     "—";
   const [requested, setRequested] = useState(new Set());
-  const [saved, setSaved] = useState(new Set());
+  // Saved players persist locally so a bookmark survives a refresh (there's no
+  // backend saved-players table yet — this is an honest local-only shortlist).
+  const [saved, setSaved] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem("rallypoint.saved");
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("rallypoint.saved", JSON.stringify([...saved]));
+    } catch {
+      /* ignore */
+    }
+  }, [saved]);
   const [sort, setSort] = useState("match");
 
   // Dismissible "how it works" strip for first-time users.
@@ -658,14 +678,14 @@ function FindPartnerPage() {
               {apiLoading && !liveMatches
                 ? "Finding your matches…"
                 : dataSource === "demo"
-                  ? "Showing example players while we reconnect"
+                  ? "Showing sample partners"
                   : visiblePlayers.length === 0
                     ? "No partners match these filters yet"
                     : `${visiblePlayers.length} partner${visiblePlayers.length === 1 ? "" : "s"} matched on skill & schedule`}
             </div>
             <h1 className="h1">Find your next <em>rally partner.</em></h1>
             <p className="sub">
-              Matched on skill, schedule, and court proximity across Chicago.
+              Matched on skill, schedule, and court proximity in your area.
             </p>
           </div>
           <div className="stats">
@@ -724,7 +744,7 @@ function FindPartnerPage() {
             <span>Top Matches</span>
             <span className="results-count">
               {visiblePlayers.length} {visiblePlayers.length === 1 ? "match" : "matches"}
-              {dataSource === "demo" && " · showing examples while offline"}
+              {dataSource === "demo" && " · samples"}
             </span>
           </div>
           <div className="sort-row" role="group" aria-label="Sort matches">
@@ -751,7 +771,7 @@ function FindPartnerPage() {
           <div className="grid">
             {Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)}
           </div>
-        ) : dataSource === "live" && visiblePlayers.length === 0 ? (
+        ) : visiblePlayers.length === 0 ? (
           <div
             role="status"
             style={{ textAlign: "center", padding: "64px 24px", maxWidth: 440, margin: "0 auto" }}
@@ -770,7 +790,7 @@ function FindPartnerPage() {
             </h3>
             <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
               Try widening your skill range or switching sport. More players are joining
-              RallyPoint across Chicago every week — check back soon.
+              RallyPoint in your area every week — check back soon.
             </p>
           </div>
         ) : (

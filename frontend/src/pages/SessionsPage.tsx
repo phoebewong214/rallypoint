@@ -12,11 +12,13 @@ import { ScheduleModal } from "../components/ScheduleModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Skeleton } from "../components/Skeleton";
 
-const StatusPill = ({ status, sentByMe }) => {
+// `status` is already viewer-relative (see Session.display_status): "pending"
+// means you proposed and are waiting on them; "requested" means it's your turn.
+const StatusPill = ({ status }) => {
   const map = {
     confirmed: { label: "Confirmed", cls: "confirmed" },
-    pending:   { label: sentByMe ? "Awaiting reply" : "Awaiting your reply", cls: "pending" },
-    requested: { label: "New request", cls: "requested" },
+    pending:   { label: "Waiting on them", cls: "pending" },
+    requested: { label: "Needs your reply", cls: "requested" },
     completed: { label: "Completed", cls: "completed" },
     cancelled: { label: "Cancelled", cls: "cancelled" },
   };
@@ -91,7 +93,7 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
             <span className="status-pill" style={{ opacity: 0.7 }}>Past game</span>
           )
         ) : (
-          <StatusPill status={s.status} sentByMe={s.sentByMe} />
+          <StatusPill status={s.status} />
         )}
 
         <div className="sess-actions">
@@ -313,12 +315,14 @@ function SessionsPage() {
               key={t.id}
               type="button"
               role="tab"
+              id={`tab-${t.id}`}
               aria-selected={tab === t.id}
+              aria-controls="session-panel"
               className={"tab" + (tab === t.id ? " active" : "")}
               onClick={() => setTab(t.id)}
             >
               <Icon name={t.icon as IconName} size={15} /> {t.label}
-              <span className="tab-count">{counts[t.id]}</span>
+              {counts[t.id] > 0 && <span className="tab-count">{counts[t.id]}</span>}
             </button>
           ))}
         </div>
@@ -344,7 +348,7 @@ function SessionsPage() {
               </h2>
             </div>
 
-            <div className="session-list">
+            <div className="session-list" id="session-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
               {visible.length === 0 ? (
                 <div className="empty">
                   <div className="ico-wrap"><Icon name="calendar" size={24} /></div>

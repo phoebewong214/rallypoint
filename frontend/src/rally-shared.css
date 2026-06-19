@@ -1257,6 +1257,36 @@ button, input, select, textarea { font-family: inherit; }
 }
 .slider-thumb:hover { transform: translate(-50%, -50%) scale(1.12); }
 .slider-thumb.active { cursor: grabbing; }
+/* Expand the touch target to ~40px without changing the visual size
+   (WCAG 2.5.5). The transparent ::before catches taps and bubbles to the thumb. */
+.slider-thumb::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+.slider-thumb:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--green-soft), 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+
+/* ---- Keyboard focus visibility (WCAG 2.4.7) ----
+   Every interactive control gets a clear ring for keyboard users. Mouse users
+   don't see it (:focus-visible only). The slider thumb is handled above. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="radio"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
 .slider-values {
   display: flex;
   justify-content: space-between;
