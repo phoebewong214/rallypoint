@@ -5,6 +5,13 @@ POST /api/ai/match-reason
 
 Returns the persisted AI verdict, regenerating with the heuristic (or
 OpenAI if OPENAI_API_KEY is set) when no cached value exists.
+
+NOTE: the frontend does NOT currently call this endpoint — the Find Partner
+list already gets its score + reason inline from GET /api/players
+(services.matching.score_and_reason). This route is kept as the on-demand
+LLM-upgrade path (call it per card, async, to swap the heuristic reason for an
+OpenAI one). It is rate-limited by the global limiter. If it stays unused,
+consider removing it rather than letting it rot.
 """
 from flask import Blueprint, jsonify, current_app
 

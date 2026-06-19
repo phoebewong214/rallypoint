@@ -629,7 +629,7 @@ function FindPartnerPage() {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
           setRequestTarget(null);
-          show(`Request sent to ${target.name} — track it in My Matches`, "success");
+          show(`Request sent to ${target.name} — track it in My Games`, "success");
         },
         onError: (err: any) => {
           // 409 = an active game/request with this player already exists. That's
@@ -637,7 +637,7 @@ function FindPartnerPage() {
           if (err instanceof ApiError && err.status === 409) {
             setRequested((prev) => new Set(prev).add(target.id));
             setRequestTarget(null);
-            show(`You already have a game in the works with ${target.name} — see My Matches`, "info");
+            show(`You already have a game in the works with ${target.name} — see My Games`, "info");
             return;
           }
           show(err?.message || "Couldn't send request", "error");
@@ -702,7 +702,7 @@ function FindPartnerPage() {
             <span style={{ color: "var(--text-dim)" }}>→</span>
             <span>
               <b style={{ color: "var(--green)" }}>3</b> They accept — track it under{" "}
-              <Link to="/sessions" style={{ color: "var(--green)", fontWeight: 700, textDecoration: "none" }}>My Matches →</Link>
+              <Link to="/sessions" style={{ color: "var(--green)", fontWeight: 700, textDecoration: "none" }}>My Games →</Link>
             </span>
             <button
               type="button" aria-label="Dismiss" onClick={dismissGuide}

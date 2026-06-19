@@ -7,9 +7,10 @@ Query params:
     ntrpMax   float                    (default: 5.0)
 """
 from flask import Blueprint, request, jsonify
+from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import User, SportProfile, AIMatchLog
+from models import User, SportProfile
 from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
 
@@ -47,8 +48,12 @@ def list_players():
     except (TypeError, ValueError):
         return jsonify({"error": "ntrpMin/ntrpMax must be numeric"}), 400
 
+    # selectinload the candidates' sport profiles in one batched query so the
+    # per-candidate profile_for() / to_dict() below don't each fire a SELECT
+    # (was an N+1 over the whole candidate pool).
     candidates = (
         db.session.query(User)
+        .options(selectinload(User.sport_profiles))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
         .filter(SportProfile.sport == sport)
@@ -68,24 +73,8 @@ def list_players():
             continue
 
         score, reason, dist_miles = score_and_reason(viewer, cand, sport)
-
-        log = AIMatchLog.query.filter_by(
-            viewer_id=viewer.id, candidate_id=cand.id, sport=sport
-        ).first()
-        if log:
-            log.score = score
-            log.reason = reason
-        else:
-            db.session.add(
-                AIMatchLog(
-                    viewer_id=viewer.id,
-                    candidate_id=cand.id,
-                    sport=sport,
-                    score=score,
-                    reason=reason,
-                    source="heuristic",
-                )
-            )
+        tennis = cand.profile_for("Tennis")
+        pickleball = cand.profile_for("Pickleball")
 
         results.append(
             {
@@ -97,8 +86,8 @@ def list_players():
                 "location": cand.location,
                 "distance": f"{dist_miles:.1f}" if dist_miles is not None else "—",
                 "online": False,
-                "tennis": cand.profile_for("Tennis").to_dict() if cand.profile_for("Tennis") else None,
-                "pickleball": cand.profile_for("Pickleball").to_dict() if cand.profile_for("Pickleball") else None,
+                "tennis": tennis.to_dict() if tennis else None,
+                "pickleball": pickleball.to_dict() if pickleball else None,
                 "matchScore": score,
                 "reason": reason,
                 "sport": sport,
@@ -106,7 +95,11 @@ def list_players():
                 "availability": cand_profile.availability_summary,
             }
         )
-    db.session.commit()
 
+    # NOTE: this is a read-only GET. We deliberately do NOT persist an
+    # AIMatchLog per candidate here — scores/reasons are cheap to recompute and
+    # logging every candidate on every filter change was pure write
+    # amplification (a GET holding a write transaction). If match analytics are
+    # wanted later, do it out-of-band, not on the hot read path.
     results.sort(key=lambda r: -r["matchScore"])
     return jsonify({"players": results, "count": len(results)})
