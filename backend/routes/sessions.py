@@ -1,8 +1,10 @@
 """
 Sessions REST endpoints.
 """
+from datetime import datetime, timedelta
+
 from flask import Blueprint, jsonify
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from extensions import db
 from models import Session, SessionStatus, User
@@ -27,10 +29,21 @@ def _participant_or_403(s, viewer):
 @require_auth
 def list_sessions():
     viewer = current_user()
+    # Cancelled / declined games leave a trace: they stay visible (in Past) so
+    # the other party can see a request was turned down or a game called off.
+    # We keep only recent ones to avoid unbounded clutter; with no cancelled_at
+    # column (create_all can't ALTER prod tables) we bound on scheduled_at.
+    cancel_cutoff = datetime.utcnow() - timedelta(days=30)
     rows = (
         Session.query.filter(
             or_(Session.host_id == viewer.id, Session.guest_id == viewer.id),
-            Session.status != SessionStatus.CANCELLED.value,  # cancelled = gone
+            or_(
+                Session.status != SessionStatus.CANCELLED.value,
+                and_(
+                    Session.scheduled_at.isnot(None),
+                    Session.scheduled_at >= cancel_cutoff,
+                ),
+            ),
         )
         .order_by(Session.scheduled_at.desc())
         .all()
@@ -47,6 +60,21 @@ def create_session():
         return jsonify({"error": "You can't start a session with yourself"}), 400
     if not User.query.get(data.guestId):
         return jsonify({"error": "That player no longer exists"}), 404
+    # Idempotency guard: don't let the same pair stack duplicate open/active
+    # invites for the same sport — return the existing one instead.
+    existing = Session.query.filter(
+        Session.sport == data.sport,
+        Session.status.in_(ACTIVE_STATUSES),
+        or_(
+            and_(Session.host_id == viewer.id, Session.guest_id == data.guestId),
+            and_(Session.host_id == data.guestId, Session.guest_id == viewer.id),
+        ),
+    ).first()
+    if existing:
+        return jsonify({
+            "error": "You already have a game in the works with this player.",
+            "session": existing.to_dict(viewer.id),
+        }), 409
     s = Session(
         host_id=viewer.id,
         guest_id=data.guestId,

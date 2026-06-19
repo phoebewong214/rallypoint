@@ -74,14 +74,44 @@ def test_reschedule_reopens_to_the_other_party(client):
     assert ga["scheduledAt"].startswith("2026-07-02")
 
 
-def test_either_party_cancels_and_it_disappears(client):
+def test_cancel_keeps_a_trace_in_past(client):
+    """Cancelled games are NOT silently deleted — they stay visible (in Past,
+    status 'cancelled') so the other party can see the game was called off."""
     a_id, a = _signup(client, "h4@rally.app")
     b_id, b = _signup(client, "g4@rally.app")
     sid = _request(client, a, b_id)
     client.post(f"/api/sessions/{sid}/accept", headers=b)  # confirmed
     assert client.post(f"/api/sessions/{sid}/cancel", headers=a).status_code == 200
-    assert _list(client, a) == []
-    assert _list(client, b) == []
+    for headers in (a, b):
+        rows = _list(client, headers)
+        assert len(rows) == 1, rows
+        assert rows[0]["status"] == "cancelled"
+        assert rows[0]["bucket"] == "past"
+
+
+def test_duplicate_request_to_same_player_is_rejected(client):
+    """A second open/active request to the same player for the same sport is a
+    409 returning the existing session (idempotency guard)."""
+    a_id, a = _signup(client, "dup_h@rally.app")
+    b_id, b = _signup(client, "dup_g@rally.app")
+    first = _request(client, a, b_id)
+    r = client.post(
+        "/api/sessions",
+        headers=a,
+        json={"guestId": b_id, "sport": "Tennis", "scheduledAt": "2026-07-05T18:00:00"},
+    )
+    assert r.status_code == 409, r.get_json()
+    assert r.get_json().get("session", {}).get("id") == first
+
+
+def test_session_payload_exposes_opponent_id(client):
+    """to_dict includes oppId so the Find Partner page can mark a player as
+    already-requested from real data."""
+    a_id, a = _signup(client, "opp_h@rally.app")
+    b_id, b = _signup(client, "opp_g@rally.app")
+    _request(client, a, b_id)
+    ha = _list(client, a)[0]
+    assert ha["oppId"] == b_id
 
 
 def test_cancel_requires_being_a_participant(client):

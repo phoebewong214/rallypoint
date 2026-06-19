@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
@@ -7,6 +8,7 @@ import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { ApiError } from "../api/client";
 
 const C = {
   green:  ["linear-gradient(135deg, #00E07A, #00B864)", "#062414"],
@@ -506,11 +508,22 @@ function FindPartnerPage() {
     setShowGuide(false);
   };
 
-  // Real activity stats from the user's sessions.
-  const { data: sessionsData } = useSessions();
+  // Real activity stats from the user's sessions. We only show numbers once the
+  // sessions actually loaded — otherwise (loading / backend down) we render "—"
+  // so the header never contradicts an offline player list with a false "0".
+  const { data: sessionsData, isError: sessError } = useSessions();
   const sessions = sessionsData?.sessions ?? [];
-  const matchesPlayed = sessions.filter((s) => s.status === "completed").length;
+  const statsReady = !!sessionsData && !sessError;
+  // "Played" = games whose time has passed (and weren't cancelled). Same source
+  // of truth as the Sessions page's Played count — no scoring involved.
+  const gamesPlayed = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").length;
   const upcomingCount = sessions.filter((s) => s.bucket === "upcoming").length;
+  // Players we already have an open/active game with — drives the "Request sent"
+  // button state from real data, so it's correct after a refresh.
+  const activePartnerIds = useMemo(
+    () => new Set(sessions.filter((s) => s.bucket !== "past").map((s) => s.oppId).filter(Boolean)),
+    [sessions],
+  );
 
   /* ---- Real backend matches via /api/players ----
      Falls back to the local demo data below when the backend
@@ -616,9 +629,19 @@ function FindPartnerPage() {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
           setRequestTarget(null);
-          show("Request sent — they'll see it in their Sessions tab", "success");
+          show(`Request sent to ${target.name} — track it in My Matches`, "success");
         },
-        onError: (err: any) => show(err?.message || "Couldn't send request", "error"),
+        onError: (err: any) => {
+          // 409 = an active game/request with this player already exists. That's
+          // not a failure — reflect it as already-sent and point them to it.
+          if (err instanceof ApiError && err.status === 409) {
+            setRequested((prev) => new Set(prev).add(target.id));
+            setRequestTarget(null);
+            show(`You already have a game in the works with ${target.name} — see My Matches`, "info");
+            return;
+          }
+          show(err?.message || "Couldn't send request", "error");
+        },
       }
     );
   };
@@ -652,12 +675,12 @@ function FindPartnerPage() {
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{matchesPlayed}</div>
-              <div className="l">Matches Played</div>
+              <div className="n">{statsReady ? gamesPlayed : "—"}</div>
+              <div className="l">Games Played</div>
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{upcomingCount}</div>
+              <div className="n">{statsReady ? upcomingCount : "—"}</div>
               <div className="l">Upcoming</div>
             </div>
           </div>
@@ -677,7 +700,10 @@ function FindPartnerPage() {
             <span style={{ color: "var(--text-dim)" }}>→</span>
             <span><b style={{ color: "var(--green)" }}>2</b> Request a game &amp; pick a time</span>
             <span style={{ color: "var(--text-dim)" }}>→</span>
-            <span><b style={{ color: "var(--green)" }}>3</b> They accept — track it under My Matches</span>
+            <span>
+              <b style={{ color: "var(--green)" }}>3</b> They accept — track it under{" "}
+              <Link to="/sessions" style={{ color: "var(--green)", fontWeight: 700, textDecoration: "none" }}>My Matches →</Link>
+            </span>
             <button
               type="button" aria-label="Dismiss" onClick={dismissGuide}
               style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", fontSize: 18, lineHeight: 1, padding: 4 }}
@@ -753,7 +779,7 @@ function FindPartnerPage() {
               <PlayerCard
                 key={p.id}
                 player={p}
-                requested={requested.has(p.id)}
+                requested={requested.has(p.id) || activePartnerIds.has(p.id)}
                 saved={saved.has(p.id)}
                 onRequest={handleRequest}
                 onSave={toggle(saved, setSaved)}

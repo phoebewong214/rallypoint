@@ -5,6 +5,7 @@ export interface ApiSession {
   bucket: "upcoming" | "requests" | "past";
   status: "confirmed" | "pending" | "requested" | "completed" | "cancelled";
   opp: string | null;
+  oppId: number | null;
   oppHandle: string | null;
   sentByMe: boolean;
   sport: "Tennis" | "Pickleball";
@@ -16,8 +17,6 @@ export interface ApiSession {
   weekday: string | null;
   time: string | null;
   note: string | null;
-  result: "W" | "L" | null;
-  score: string | null;
   next?: boolean;
 }
 

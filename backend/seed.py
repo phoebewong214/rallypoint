@@ -105,15 +105,18 @@ def _seed():
                 sport="Tennis",     scheduled_at=now + timedelta(days=6),
                 status=SessionStatus.REQUESTED.value,
                 note="Up for an early Sunday match? I'll bring new balls."),
+        # Past games: confirmed sessions whose time has passed. They land in
+        # Past automatically (bucket logic) — RallyPoint only makes the intro,
+        # so no result/score is tracked.
         Session(host_id=alex.id,   guest_id=maya.id,   court_id=courts["lincoln-park"].id,
                 sport="Pickleball", scheduled_at=now - timedelta(days=5),
-                status=SessionStatus.COMPLETED.value, result="W", score="11-7, 11-9"),
+                status=SessionStatus.CONFIRMED.value),
         Session(host_id=alex.id,   guest_id=jordan.id, court_id=courts["grant-park"].id,
                 sport="Tennis",     scheduled_at=now - timedelta(days=7),
-                status=SessionStatus.COMPLETED.value, result="W", score="6-3, 4-6, 7-5"),
+                status=SessionStatus.CONFIRMED.value),
         Session(host_id=alex.id,   guest_id=sofia.id,  court_id=courts["lincoln-park"].id,
                 sport="Pickleball", scheduled_at=now - timedelta(days=14),
-                status=SessionStatus.COMPLETED.value, result="L", score="9-11, 7-11"),
+                status=SessionStatus.CONFIRMED.value),
     ]
     db.session.add_all(sessions)
 

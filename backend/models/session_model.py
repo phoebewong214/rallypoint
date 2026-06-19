@@ -33,10 +33,6 @@ class Session(db.Model):
     status = db.Column(db.String(20), nullable=False, default=SessionStatus.REQUESTED.value)
     note = db.Column(db.Text)
 
-    # Filled in only after status == completed
-    result = db.Column(db.String(2))      # "W" or "L" from host perspective
-    score = db.Column(db.String(80))      # "11-7, 11-9"
-
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     host = db.relationship("User", foreign_keys=[host_id])
@@ -70,15 +66,6 @@ class Session(db.Model):
             return "requested" if viewer_id == self.guest_id else "pending"
         return self.status
 
-    def result_for(self, viewer_id: int):
-        """W/L from the viewer's perspective (stored from the host's). None for
-        a casual game with no recorded result."""
-        if not self.result:
-            return None
-        if viewer_id == self.host_id:
-            return self.result
-        return {"W": "L", "L": "W"}.get(self.result, self.result)
-
     def to_dict(self, viewer_id: int) -> dict:
         opp = self.guest if viewer_id == self.host_id else self.host
         return {
@@ -86,6 +73,7 @@ class Session(db.Model):
             "bucket": self.bucket(viewer_id),
             "status": self.display_status(viewer_id),
             "opp": opp.name if opp else None,
+            "oppId": opp.id if opp else None,
             "oppHandle": opp.handle if opp else None,
             "sentByMe": self.host_id == viewer_id,
             "sport": self.sport,
@@ -97,6 +85,4 @@ class Session(db.Model):
             "weekday": self.scheduled_at.strftime("%a") if self.scheduled_at else None,
             "time": self.scheduled_at.strftime("%-I:%M %p") if self.scheduled_at else None,
             "note": self.note,
-            "result": self.result_for(viewer_id),
-            "score": self.score,
         }
