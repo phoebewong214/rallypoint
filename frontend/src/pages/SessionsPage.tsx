@@ -4,7 +4,7 @@ import type { IconName } from "../types";
 import { TopNav, Icon, Avatar } from "../rally-shared";
 import {
   useSessions, useAcceptSession, useDeclineSession,
-  useCancelSession, useRescheduleSession, useCompleteSession,
+  useCancelSession, useRescheduleSession,
 } from "../hooks/useSessions";
 import { useToast } from "../contexts/ToastContext";
 import { ScheduleModal } from "../components/ScheduleModal";
@@ -105,14 +105,12 @@ const StatusPill = ({ status, sentByMe }) => {
   );
 };
 
-function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onComplete, onSoon, busy }: {
+function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
   s: any;
   onAccept: (id: number) => void;
   onDecline: (id: number) => void;
   onCancel: (id: number) => void;
   onReschedule: (s: any) => void;
-  onComplete: (s: any) => void;
-  onSoon: (feature: string) => void;
   busy?: boolean;
 }) {
   return (
@@ -162,46 +160,32 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onComplete
       </div>
 
       <div className="sess-right">
-        {s.status === "completed" && s.result ? (
-          <div className="result-line">
-            <span className={"result-tag " + s.result.toLowerCase()}>{s.result}</span>
-            {s.score}
-          </div>
+        {s.bucket === "past" ? (
+          <span className="status-pill" style={{ opacity: 0.7 }}>Played</span>
         ) : (
           <StatusPill status={s.status} sentByMe={s.sentByMe} />
         )}
 
         <div className="sess-actions">
-          {s.status === "confirmed" && (
-            <>
-              <button className="btn-sm primary" type="button" onClick={() => onComplete(s)}>
-                <Icon name="check" size={14} stroke={2.5} /> Mark as played
-              </button>
-              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
-              <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
-            </>
-          )}
-          {s.status === "pending" && (
+          {s.bucket !== "past" && s.status === "confirmed" && (
             <>
               <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
               <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
             </>
           )}
-          {s.status === "requested" && (
+          {s.bucket !== "past" && s.status === "pending" && (
+            <>
+              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Reschedule</button>
+              <button className="btn-sm danger" type="button" onClick={() => onCancel(s.id)} disabled={busy}>Cancel</button>
+            </>
+          )}
+          {s.bucket !== "past" && s.status === "requested" && (
             <>
               <button className="btn-sm primary" type="button" onClick={() => onAccept(s.id)} disabled={busy}>
                 <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
               </button>
               <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)}>Propose new time</button>
               <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Decline</button>
-            </>
-          )}
-          {s.status === "completed" && (
-            <>
-              <button className="btn-sm ghost" type="button" onClick={() => onSoon("Match details")}>View Details</button>
-              <button className="btn-sm primary" type="button" onClick={() => onSoon("Rematch booking")}>
-                <Icon name="bolt" size={13} stroke={2.4} /> Rematch
-              </button>
             </>
           )}
         </div>
@@ -211,8 +195,8 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, onComplete
 }
 
 const TABS = [
-  { id: "upcoming", label: "Upcoming",  icon: "calendar" },
   { id: "requests", label: "Requests",  icon: "bell" },
+  { id: "upcoming", label: "Upcoming",  icon: "calendar" },
   { id: "past",     label: "Past",      icon: "trophy" },
 ];
 
@@ -223,62 +207,6 @@ const EMPTY_COPY: Record<string, { title: string; sub: string }> = {
   past:     { title: "No past games yet", sub: "Games you mark as played show up here." },
 };
 
-/* "Mark as played" — outcome and score are optional so a casual hit can be
-   logged with neither. */
-function CompleteModal({ opp, busy, onSubmit, onClose }: {
-  opp: string | null;
-  busy?: boolean;
-  onSubmit: (outcome: "won" | "lost" | undefined, score?: string) => void;
-  onClose: () => void;
-}) {
-  const [outcome, setOutcome] = useState<"won" | "lost" | "casual">("casual");
-  const [score, setScore] = useState("");
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(outcome === "casual" ? undefined : outcome, score.trim() || undefined);
-  };
-  const opts: [typeof outcome, string][] = [
-    ["won", "I won"], ["lost", "I lost"], ["casual", "Just for fun"],
-  ];
-  return (
-    <div
-      role="dialog" aria-modal="true" aria-label="Mark as played" onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16 }}
-    >
-      <form
-        onClick={(e) => e.stopPropagation()} onSubmit={submit}
-        style={{ width: "100%", maxWidth: 420, background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}
-      >
-        <div>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>How did it go?</h3>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-dim)" }}>vs {opp ?? "your partner"}</p>
-        </div>
-        <div className="pill-group" role="radiogroup" aria-label="Result">
-          {opts.map(([k, label]) => (
-            <button
-              key={k} type="button" role="radio" aria-checked={outcome === k}
-              className={"pill" + (outcome === k ? " active" : "")}
-              onClick={() => setOutcome(k)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="field">
-          <label className="field-label" htmlFor="score">Score (optional)</label>
-          <input id="score" className="input" value={score} maxLength={80}
-            placeholder="e.g. 11-7, 11-9" onChange={(e) => setScore(e.target.value)} />
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={busy} style={{ flex: 1, opacity: busy ? 0.7 : 1 }}>
-            {busy ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 function SessionsPage() {
   const [tab, setTab] = useState("upcoming");
@@ -296,11 +224,9 @@ function SessionsPage() {
   const decline = useDeclineSession();
   const cancel = useCancelSession();
   const reschedule = useRescheduleSession();
-  const complete = useCompleteSession();
 
-  // The session being rescheduled / marked-played (each opens its modal).
+  // The session being rescheduled (opens the modal), if any.
   const [reschedTarget, setReschedTarget] = useState<any | null>(null);
-  const [completeTarget, setCompleteTarget] = useState<any | null>(null);
 
   const handleAccept = (id: number) => {
     accept.mutate(id, {
@@ -333,19 +259,6 @@ function SessionsPage() {
       },
     );
   };
-  const handleComplete = (outcome: "won" | "lost" | undefined, score?: string) => {
-    if (!completeTarget) return;
-    complete.mutate(
-      { id: completeTarget.id, outcome, score },
-      {
-        onSuccess: () => {
-          setCompleteTarget(null);
-          show("Logged — nice game!", "success");
-        },
-        onError: () => show("Couldn't save — try again", "error"),
-      },
-    );
-  };
   const busyId = accept.isPending
     ? accept.variables
     : decline.isPending
@@ -360,19 +273,11 @@ function SessionsPage() {
     past:     sessions.filter((s: any) => s.bucket === "past").length,
   }), [sessions]);
 
-  // Real stats derived from the session list (no hardcoded numbers).
+  // Real stats derived from the session list (no hardcoded numbers, no scores).
   const stats = useMemo(() => {
-    const completed = sessions.filter((s: any) => s.status === "completed");
-    const wins = completed.filter((s: any) => s.result === "W").length;
-    const losses = completed.filter((s: any) => s.result === "L").length;
-    const decided = wins + losses;
     const pending = sessions.filter((s: any) => s.status === "pending");
     const pendingSent = pending.filter((s: any) => s.sentByMe).length;
     return {
-      completed: completed.length,
-      wins,
-      losses,
-      winRate: decided ? Math.round((wins / decided) * 100) : null,
       pending: pending.length,
       pendingSent,
       pendingReceived: pending.length - pendingSent,
@@ -413,6 +318,11 @@ function SessionsPage() {
         {/* Stats */}
         <section className="stats-row">
           <div className="stat-card">
+            <span className="label">Requests</span>
+            <span className="value">{counts.requests}</span>
+            <span className="sub">{counts.requests === 0 ? "None waiting" : "Waiting on you"}</span>
+          </div>
+          <div className="stat-card">
             <span className="label">Upcoming</span>
             <span className="value">{counts.upcoming}</span>
             <span className="sub">
@@ -424,15 +334,10 @@ function SessionsPage() {
             <span className="value">{stats.pending}</span>
             <span className="sub">{stats.pendingSent} sent · {stats.pendingReceived} received</span>
           </div>
-          <div className="stat-card">
-            <span className="label">Games Played</span>
-            <span className="value">{stats.completed}</span>
-            <span className="sub">{stats.completed === 0 ? "No games yet" : "Completed"}</span>
-          </div>
           <div className="stat-card accent">
-            <span className="label">Win Rate</span>
-            <span className="value">{stats.winRate === null ? "—" : `${stats.winRate}%`}</span>
-            <span className="sub">{stats.wins}W · {stats.losses}L</span>
+            <span className="label">Played</span>
+            <span className="value">{counts.past}</span>
+            <span className="sub">{counts.past === 0 ? "No games yet" : "Games so far"}</span>
           </div>
         </section>
 
@@ -482,8 +387,6 @@ function SessionsPage() {
                 onDecline={handleDecline}
                 onCancel={handleCancel}
                 onReschedule={setReschedTarget}
-                onComplete={setCompleteTarget}
-                onSoon={soon}
                 busy={busyId === s.id}
               />
             ))
@@ -503,14 +406,6 @@ function SessionsPage() {
         />
       )}
 
-      {completeTarget && (
-        <CompleteModal
-          opp={completeTarget.opp}
-          busy={complete.isPending}
-          onSubmit={handleComplete}
-          onClose={() => setCompleteTarget(null)}
-        />
-      )}
     </>
   );
 }

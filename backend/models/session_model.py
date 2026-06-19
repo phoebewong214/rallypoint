@@ -48,17 +48,20 @@ class Session(db.Model):
     _OPEN = (SessionStatus.PENDING.value, SessionStatus.REQUESTED.value)
 
     def bucket(self, viewer_id: int) -> str:
-        """Bucket a session for a given viewer (host or guest)."""
-        if self.status == SessionStatus.COMPLETED.value:
+        """Bucket a session for a given viewer (host or guest). RallyPoint only
+        does the matchmaking — once a game's time has passed it simply moves to
+        Past (no result/score tracking)."""
+        if self.status in (SessionStatus.COMPLETED.value, SessionStatus.CANCELLED.value):
             return SessionBucket.PAST.value
-        if self.status == SessionStatus.CANCELLED.value:
-            return SessionBucket.PAST.value
+        is_past = self.scheduled_at is not None and self.scheduled_at < datetime.utcnow()
         if self.status == SessionStatus.CONFIRMED.value:
-            return SessionBucket.UPCOMING.value
-        # open invite: the responder (guest) sees it as an incoming request
-        if self.status in self._OPEN and viewer_id == self.guest_id:
-            return SessionBucket.REQUESTS.value
-        return SessionBucket.UPCOMING.value  # the proposer's outbound invite
+            return SessionBucket.PAST.value if is_past else SessionBucket.UPCOMING.value
+        # open invite
+        if self.status in self._OPEN:
+            if is_past:
+                return SessionBucket.PAST.value  # invite never answered in time
+            return SessionBucket.REQUESTS.value if viewer_id == self.guest_id else SessionBucket.UPCOMING.value
+        return SessionBucket.UPCOMING.value
 
     def display_status(self, viewer_id: int) -> str:
         """Viewer-relative status: an open invite reads as 'requested' to the

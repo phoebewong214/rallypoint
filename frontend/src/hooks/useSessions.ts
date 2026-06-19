@@ -52,11 +52,3 @@ export function useRescheduleSession() {
   });
 }
 
-export function useCompleteSession() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, outcome, score }: { id: number; outcome?: "won" | "lost"; score?: string }) =>
-      sessionsApi.complete(id, { outcome, score }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
-  });
-}
