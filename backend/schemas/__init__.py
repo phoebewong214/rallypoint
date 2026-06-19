@@ -9,7 +9,7 @@ from .auth import (
     ResetPasswordSchema,
     TokenSchema,
 )
-from .sessions import CreateSessionSchema, RescheduleSessionSchema, CompleteSessionSchema
+from .sessions import CreateSessionSchema, RescheduleSessionSchema
 from .ai import MatchReasonSchema
 from .profile import UpdateProfileSchema
 
@@ -21,7 +21,6 @@ __all__ = [
     "TokenSchema",
     "CreateSessionSchema",
     "RescheduleSessionSchema",
-    "CompleteSessionSchema",
     "MatchReasonSchema",
     "UpdateProfileSchema",
 ]

@@ -74,14 +74,44 @@ def test_reschedule_reopens_to_the_other_party(client):
     assert ga["scheduledAt"].startswith("2026-07-02")
 
 
-def test_either_party_cancels_and_it_disappears(client):
+def test_cancel_keeps_a_trace_in_past(client):
+    """Cancelled games are NOT silently deleted — they stay visible (in Past,
+    status 'cancelled') so the other party can see the game was called off."""
     a_id, a = _signup(client, "h4@rally.app")
     b_id, b = _signup(client, "g4@rally.app")
     sid = _request(client, a, b_id)
     client.post(f"/api/sessions/{sid}/accept", headers=b)  # confirmed
     assert client.post(f"/api/sessions/{sid}/cancel", headers=a).status_code == 200
-    assert _list(client, a) == []
-    assert _list(client, b) == []
+    for headers in (a, b):
+        rows = _list(client, headers)
+        assert len(rows) == 1, rows
+        assert rows[0]["status"] == "cancelled"
+        assert rows[0]["bucket"] == "past"
+
+
+def test_duplicate_request_to_same_player_is_rejected(client):
+    """A second open/active request to the same player for the same sport is a
+    409 returning the existing session (idempotency guard)."""
+    a_id, a = _signup(client, "dup_h@rally.app")
+    b_id, b = _signup(client, "dup_g@rally.app")
+    first = _request(client, a, b_id)
+    r = client.post(
+        "/api/sessions",
+        headers=a,
+        json={"guestId": b_id, "sport": "Tennis", "scheduledAt": "2026-07-05T18:00:00"},
+    )
+    assert r.status_code == 409, r.get_json()
+    assert r.get_json().get("session", {}).get("id") == first
+
+
+def test_session_payload_exposes_opponent_id(client):
+    """to_dict includes oppId so the Find Partner page can mark a player as
+    already-requested from real data."""
+    a_id, a = _signup(client, "opp_h@rally.app")
+    b_id, b = _signup(client, "opp_g@rally.app")
+    _request(client, a, b_id)
+    ha = _list(client, a)[0]
+    assert ha["oppId"] == b_id
 
 
 def test_cancel_requires_being_a_participant(client):
@@ -90,40 +120,3 @@ def test_cancel_requires_being_a_participant(client):
     _c_id, c = _signup(client, "stranger@rally.app")
     sid = _request(client, a, b_id)
     assert client.post(f"/api/sessions/{sid}/cancel", headers=c).status_code == 403
-
-
-def _confirmed(client):
-    a_id, a = _signup(client, f"ha{id(client)}@rally.app")
-    b_id, b = _signup(client, f"gb{id(client)}@rally.app")
-    sid = _request(client, a, b_id)
-    client.post(f"/api/sessions/{sid}/accept", headers=b)
-    return sid, a, b
-
-
-def test_complete_casual_has_no_result(client):
-    sid, a, b = _confirmed(client)
-    rsp = client.post(f"/api/sessions/{sid}/complete", headers=a, json={})
-    assert rsp.status_code == 200
-    s = rsp.get_json()["session"]
-    assert s["status"] == "completed" and s["bucket"] == "past" and s["result"] is None
-
-
-def test_complete_with_outcome_is_viewer_relative(client):
-    sid, a, b = _confirmed(client)
-    # A reports a win, with a score.
-    rsp = client.post(
-        f"/api/sessions/{sid}/complete", headers=a,
-        json={"outcome": "won", "score": "11-7, 11-9"},
-    )
-    assert rsp.status_code == 200
-    assert rsp.get_json()["session"]["result"] == "W"  # A's perspective
-    # B sees the same game as a loss.
-    b_view = [x for x in _list(client, b) if x["id"] == sid][0]
-    assert b_view["result"] == "L" and b_view["score"] == "11-7, 11-9"
-
-
-def test_only_confirmed_can_be_completed(client):
-    a_id, a = _signup(client, "hc@rally.app")
-    b_id, b = _signup(client, "gc@rally.app")
-    sid = _request(client, a, b_id)  # still pending, not accepted
-    assert client.post(f"/api/sessions/{sid}/complete", headers=a, json={}).status_code == 409

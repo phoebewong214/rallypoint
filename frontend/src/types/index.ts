@@ -69,8 +69,6 @@ export interface Session {
   next?: boolean;
   sentByMe?: boolean;
   note?: string;
-  result?: MatchResult;
-  score?: string;
 }
 
 export type CourtActivity = "busy" | "open" | "quiet";

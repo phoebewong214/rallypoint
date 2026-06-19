@@ -5,6 +5,7 @@ export interface ApiSession {
   bucket: "upcoming" | "requests" | "past";
   status: "confirmed" | "pending" | "requested" | "completed" | "cancelled";
   opp: string | null;
+  oppId: number | null;
   oppHandle: string | null;
   sentByMe: boolean;
   sport: "Tennis" | "Pickleball";
@@ -16,8 +17,6 @@ export interface ApiSession {
   weekday: string | null;
   time: string | null;
   note: string | null;
-  result: "W" | "L" | null;
-  score: string | null;
   next?: boolean;
 }
 
@@ -33,11 +32,6 @@ export interface RescheduleBody {
   note?: string;
 }
 
-export interface CompleteBody {
-  outcome?: "won" | "lost"; // omit for a casual game (no result)
-  score?: string;
-}
-
 export const sessionsApi = {
   list: () => api<{ sessions: ApiSession[] }>("/sessions"),
   create: (body: CreateSessionBody) =>
@@ -50,6 +44,4 @@ export const sessionsApi = {
     api<{ session: ApiSession }>(`/sessions/${id}/cancel`, { method: "POST" }),
   reschedule: (id: number, body: RescheduleBody) =>
     api<{ session: ApiSession }>(`/sessions/${id}/reschedule`, { method: "POST", body }),
-  complete: (id: number, body: CompleteBody) =>
-    api<{ session: ApiSession }>(`/sessions/${id}/complete`, { method: "POST", body }),
 };

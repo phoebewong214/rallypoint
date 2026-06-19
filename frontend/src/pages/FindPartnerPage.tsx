@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
@@ -7,6 +8,7 @@ import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { ApiError } from "../api/client";
 
 const C = {
   green:  ["linear-gradient(135deg, #00E07A, #00B864)", "#062414"],
@@ -379,9 +381,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
   return (
     <article className="card">
       <div className="card-top">
-        <div className="avatar" style={{ background: player.color, color: player.fg }}>
+        <div className="avatar size-md" style={{ background: player.color, color: player.fg }}>
           {player.initials}
-          {player.online && <span className="online" title="Online" />}
         </div>
         <div className="name-wrap">
           <h3 className="name">{player.name}</h3>
@@ -389,8 +390,12 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
             <span className="badge skill">{ratingLabel(player.sport)} {player.ntrp}</span>
             <span className="badge sport">{player.sport}</span>
             {player.altSport && (
-              <span className="badge sport" title={`Also plays ${player.altSport.sport}`}>
-                + {player.altSport.sport} {ratingLabel(player.altSport.sport)} {player.altSport.ntrp}
+              <span
+                className="badge sport"
+                style={{ opacity: 0.6, fontWeight: 600 }}
+                title={`Also plays ${player.altSport.sport} at ${ratingLabel(player.altSport.sport)} ${player.altSport.ntrp}`}
+              >
+                also {player.altSport.sport} {player.altSport.ntrp}
               </span>
             )}
           </div>
@@ -422,7 +427,7 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
 
       <div
         className="ai-box"
-        title="Score = rating closeness + same primary sport + proximity (≤2 mi) + availability overlap"
+        title="Based on skill match, location, and schedule overlap"
       >
         <div className="ai-ico"><Icon name="sparkles" size={14} stroke={2.4} /></div>
         <div className="ai-content">
@@ -453,7 +458,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
         </button>
         <button
           className={"btn-icon" + (saved ? " active" : "")}
-          aria-label="Save"
+          aria-label={saved ? "Saved — tap to remove" : "Save player"}
+          aria-pressed={saved}
           onClick={() => onSave(player.id)}
         >
           <Icon name="bookmark" size={16} />
@@ -494,7 +500,23 @@ function FindPartnerPage() {
     myProfiles?.find((p) => (p.sport || "").toLowerCase() === applied.sport.toLowerCase())?.ntrp ??
     "—";
   const [requested, setRequested] = useState(new Set());
-  const [saved, setSaved] = useState(new Set());
+  // Saved players persist locally so a bookmark survives a refresh (there's no
+  // backend saved-players table yet — this is an honest local-only shortlist).
+  const [saved, setSaved] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem("rallypoint.saved");
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("rallypoint.saved", JSON.stringify([...saved]));
+    } catch {
+      /* ignore */
+    }
+  }, [saved]);
   const [sort, setSort] = useState("match");
 
   // Dismissible "how it works" strip for first-time users.
@@ -506,11 +528,22 @@ function FindPartnerPage() {
     setShowGuide(false);
   };
 
-  // Real activity stats from the user's sessions.
-  const { data: sessionsData } = useSessions();
+  // Real activity stats from the user's sessions. We only show numbers once the
+  // sessions actually loaded — otherwise (loading / backend down) we render "—"
+  // so the header never contradicts an offline player list with a false "0".
+  const { data: sessionsData, isError: sessError } = useSessions();
   const sessions = sessionsData?.sessions ?? [];
-  const matchesPlayed = sessions.filter((s) => s.status === "completed").length;
+  const statsReady = !!sessionsData && !sessError;
+  // "Played" = games whose time has passed (and weren't cancelled). Same source
+  // of truth as the Sessions page's Played count — no scoring involved.
+  const gamesPlayed = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").length;
   const upcomingCount = sessions.filter((s) => s.bucket === "upcoming").length;
+  // Players we already have an open/active game with — drives the "Request sent"
+  // button state from real data, so it's correct after a refresh.
+  const activePartnerIds = useMemo(
+    () => new Set(sessions.filter((s) => s.bucket !== "past").map((s) => s.oppId).filter(Boolean)),
+    [sessions],
+  );
 
   /* ---- Real backend matches via /api/players ----
      Falls back to the local demo data below when the backend
@@ -616,9 +649,19 @@ function FindPartnerPage() {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
           setRequestTarget(null);
-          show("Request sent — they'll see it in their Sessions tab", "success");
+          show(`Request sent to ${target.name} — track it in My Games`, "success");
         },
-        onError: (err: any) => show(err?.message || "Couldn't send request", "error"),
+        onError: (err: any) => {
+          // 409 = an active game/request with this player already exists. That's
+          // not a failure — reflect it as already-sent and point them to it.
+          if (err instanceof ApiError && err.status === 409) {
+            setRequested((prev) => new Set(prev).add(target.id));
+            setRequestTarget(null);
+            show(`You already have a game in the works with ${target.name} — see My Games`, "info");
+            return;
+          }
+          show(err?.message || "Couldn't send request", "error");
+        },
       }
     );
   };
@@ -635,14 +678,14 @@ function FindPartnerPage() {
               {apiLoading && !liveMatches
                 ? "Finding your matches…"
                 : dataSource === "demo"
-                  ? "Showing example players while we reconnect"
+                  ? "Showing sample partners"
                   : visiblePlayers.length === 0
                     ? "No partners match these filters yet"
                     : `${visiblePlayers.length} partner${visiblePlayers.length === 1 ? "" : "s"} matched on skill & schedule`}
             </div>
             <h1 className="h1">Find your next <em>rally partner.</em></h1>
             <p className="sub">
-              Matched on skill, schedule, and court proximity across Chicago.
+              Matched on skill, schedule, and court proximity in your area.
             </p>
           </div>
           <div className="stats">
@@ -652,12 +695,12 @@ function FindPartnerPage() {
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{matchesPlayed}</div>
-              <div className="l">Matches Played</div>
+              <div className="n">{statsReady ? gamesPlayed : "—"}</div>
+              <div className="l">Games Played</div>
             </div>
             <div className="stat-divider" />
             <div className="stat">
-              <div className="n">{upcomingCount}</div>
+              <div className="n">{statsReady ? upcomingCount : "—"}</div>
               <div className="l">Upcoming</div>
             </div>
           </div>
@@ -677,7 +720,10 @@ function FindPartnerPage() {
             <span style={{ color: "var(--text-dim)" }}>→</span>
             <span><b style={{ color: "var(--green)" }}>2</b> Request a game &amp; pick a time</span>
             <span style={{ color: "var(--text-dim)" }}>→</span>
-            <span><b style={{ color: "var(--green)" }}>3</b> They accept — track it under My Matches</span>
+            <span>
+              <b style={{ color: "var(--green)" }}>3</b> They accept — track it under{" "}
+              <Link to="/sessions" style={{ color: "var(--green)", fontWeight: 700, textDecoration: "none" }}>My Games →</Link>
+            </span>
             <button
               type="button" aria-label="Dismiss" onClick={dismissGuide}
               style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", fontSize: 18, lineHeight: 1, padding: 4 }}
@@ -698,7 +744,7 @@ function FindPartnerPage() {
             <span>Top Matches</span>
             <span className="results-count">
               {visiblePlayers.length} {visiblePlayers.length === 1 ? "match" : "matches"}
-              {dataSource === "demo" && " · showing examples while offline"}
+              {dataSource === "demo" && " · samples"}
             </span>
           </div>
           <div className="sort-row" role="group" aria-label="Sort matches">
@@ -725,7 +771,7 @@ function FindPartnerPage() {
           <div className="grid">
             {Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)}
           </div>
-        ) : dataSource === "live" && visiblePlayers.length === 0 ? (
+        ) : visiblePlayers.length === 0 ? (
           <div
             role="status"
             style={{ textAlign: "center", padding: "64px 24px", maxWidth: 440, margin: "0 auto" }}
@@ -744,7 +790,7 @@ function FindPartnerPage() {
             </h3>
             <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
               Try widening your skill range or switching sport. More players are joining
-              RallyPoint across Chicago every week — check back soon.
+              RallyPoint in your area every week — check back soon.
             </p>
           </div>
         ) : (
@@ -753,7 +799,7 @@ function FindPartnerPage() {
               <PlayerCard
                 key={p.id}
                 player={p}
-                requested={requested.has(p.id)}
+                requested={requested.has(p.id) || activePartnerIds.has(p.id)}
                 saved={saved.has(p.id)}
                 onRequest={handleRequest}
                 onSave={toggle(saved, setSaved)}

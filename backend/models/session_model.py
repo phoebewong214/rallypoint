@@ -2,9 +2,14 @@
 Session = a booked / requested / completed match between two users.
 Named session_model.py to avoid shadowing flask.session.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 from extensions import db
+
+# A confirmed game stays in "Upcoming" until a few hours past its start time, so
+# a game that's currently being played doesn't vanish from the list the instant
+# the clock passes its scheduled time.
+PAST_GRACE = timedelta(hours=3)
 
 
 class SessionStatus(str, enum.Enum):
@@ -33,10 +38,6 @@ class Session(db.Model):
     status = db.Column(db.String(20), nullable=False, default=SessionStatus.REQUESTED.value)
     note = db.Column(db.Text)
 
-    # Filled in only after status == completed
-    result = db.Column(db.String(2))      # "W" or "L" from host perspective
-    score = db.Column(db.String(80))      # "11-7, 11-9"
-
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     host = db.relationship("User", foreign_keys=[host_id])
@@ -48,17 +49,20 @@ class Session(db.Model):
     _OPEN = (SessionStatus.PENDING.value, SessionStatus.REQUESTED.value)
 
     def bucket(self, viewer_id: int) -> str:
-        """Bucket a session for a given viewer (host or guest)."""
-        if self.status == SessionStatus.COMPLETED.value:
+        """Bucket a session for a given viewer (host or guest). RallyPoint only
+        does the matchmaking — once a game's time has passed it simply moves to
+        Past (no result/score tracking)."""
+        if self.status in (SessionStatus.COMPLETED.value, SessionStatus.CANCELLED.value):
             return SessionBucket.PAST.value
-        if self.status == SessionStatus.CANCELLED.value:
-            return SessionBucket.PAST.value
+        is_past = self.scheduled_at is not None and self.scheduled_at < datetime.utcnow() - PAST_GRACE
         if self.status == SessionStatus.CONFIRMED.value:
-            return SessionBucket.UPCOMING.value
-        # open invite: the responder (guest) sees it as an incoming request
-        if self.status in self._OPEN and viewer_id == self.guest_id:
-            return SessionBucket.REQUESTS.value
-        return SessionBucket.UPCOMING.value  # the proposer's outbound invite
+            return SessionBucket.PAST.value if is_past else SessionBucket.UPCOMING.value
+        # open invite
+        if self.status in self._OPEN:
+            if is_past:
+                return SessionBucket.PAST.value  # invite never answered in time
+            return SessionBucket.REQUESTS.value if viewer_id == self.guest_id else SessionBucket.UPCOMING.value
+        return SessionBucket.UPCOMING.value
 
     def display_status(self, viewer_id: int) -> str:
         """Viewer-relative status: an open invite reads as 'requested' to the
@@ -67,15 +71,6 @@ class Session(db.Model):
             return "requested" if viewer_id == self.guest_id else "pending"
         return self.status
 
-    def result_for(self, viewer_id: int):
-        """W/L from the viewer's perspective (stored from the host's). None for
-        a casual game with no recorded result."""
-        if not self.result:
-            return None
-        if viewer_id == self.host_id:
-            return self.result
-        return {"W": "L", "L": "W"}.get(self.result, self.result)
-
     def to_dict(self, viewer_id: int) -> dict:
         opp = self.guest if viewer_id == self.host_id else self.host
         return {
@@ -83,6 +78,7 @@ class Session(db.Model):
             "bucket": self.bucket(viewer_id),
             "status": self.display_status(viewer_id),
             "opp": opp.name if opp else None,
+            "oppId": opp.id if opp else None,
             "oppHandle": opp.handle if opp else None,
             "sentByMe": self.host_id == viewer_id,
             "sport": self.sport,
@@ -94,6 +90,4 @@ class Session(db.Model):
             "weekday": self.scheduled_at.strftime("%a") if self.scheduled_at else None,
             "time": self.scheduled_at.strftime("%-I:%M %p") if self.scheduled_at else None,
             "note": self.note,
-            "result": self.result_for(viewer_id),
-            "score": self.score,
         }
