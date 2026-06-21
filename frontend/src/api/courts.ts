@@ -11,6 +11,8 @@ export interface ApiCourt {
   courtCount: number;
   surface: string;
   lights: boolean;
+  distance: number | null; // straight-line miles from the viewer, null if unknown
+  fav: boolean;
 }
 
 export interface CourtsResponse {
@@ -35,4 +37,8 @@ export const courtsApi = {
     api<CourtsResponse>("/courts" + toQS(filters)),
   get: (slug: string) =>
     api<{ court: ApiCourt }>(`/courts/${slug}`),
+  favorite: (slug: string) =>
+    api<{ id: string; fav: boolean }>(`/courts/${slug}/favorite`, { method: "POST" }),
+  unfavorite: (slug: string) =>
+    api<{ id: string; fav: boolean }>(`/courts/${slug}/favorite`, { method: "DELETE" }),
 };
