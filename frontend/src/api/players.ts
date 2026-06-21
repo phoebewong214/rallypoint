@@ -10,6 +10,7 @@ export interface PlayerFilters {
   sport?: Sport;
   ntrpMin?: number;
   ntrpMax?: number;
+  courts?: string[]; // court slugs — only players whose home court is one of these
 }
 
 function toQS(filters: PlayerFilters): string {
@@ -17,6 +18,7 @@ function toQS(filters: PlayerFilters): string {
   if (filters.sport) params.push(`sport=${encodeURIComponent(filters.sport)}`);
   if (filters.ntrpMin !== undefined) params.push(`ntrpMin=${filters.ntrpMin}`);
   if (filters.ntrpMax !== undefined) params.push(`ntrpMax=${filters.ntrpMax}`);
+  if (filters.courts && filters.courts.length) params.push(`courts=${filters.courts.map(encodeURIComponent).join(",")}`);
   return params.length ? "?" + params.join("&") : "";
 }
 
