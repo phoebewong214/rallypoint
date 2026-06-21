@@ -5,10 +5,12 @@ Small management CLI for deploys.
     python manage.py seed           # DROP everything and load sample data (dev only!)
     python manage.py seed-demo      # ADD N virtual users (non-destructive; N defaults to 40)
     python manage.py seed-demo 60   # ...with a custom count
+    python manage.py unseed-demo    # REMOVE the virtual demo users (@demo.tryrallypoint.com)
 
 On a fresh production database run `init-db` once to create the schema.
-Do NOT run `seed` against real data — it drops tables. `seed-demo` is safe in
-prod: it never drops and skips existing emails.
+Do NOT run `seed` against real data — it drops tables. `seed-demo` and
+`unseed-demo` are both safe in prod: they only touch the @demo.tryrallypoint.com
+accounts and never drop tables.
 """
 import sys
 
@@ -44,7 +46,17 @@ def seed_demo_cmd():
     seed_demo(count)
 
 
-COMMANDS = {"init-db": init_db, "seed": seed, "seed-demo": seed_demo_cmd}
+def unseed_demo_cmd():
+    from seed_demo import unseed_demo
+    unseed_demo()
+
+
+COMMANDS = {
+    "init-db": init_db,
+    "seed": seed,
+    "seed-demo": seed_demo_cmd,
+    "unseed-demo": unseed_demo_cmd,
+}
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
