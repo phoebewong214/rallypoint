@@ -51,11 +51,23 @@ def unseed_demo_cmd():
     unseed_demo()
 
 
+def build_courts_cmd():
+    from import_courts import build
+    build()
+
+
+def import_courts_cmd():
+    from import_courts import load
+    load()
+
+
 COMMANDS = {
     "init-db": init_db,
     "seed": seed,
     "seed-demo": seed_demo_cmd,
     "unseed-demo": unseed_demo_cmd,
+    "build-courts": build_courts_cmd,
+    "import-courts": import_courts_cmd,
 }
 
 if __name__ == "__main__":
