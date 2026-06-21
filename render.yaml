@@ -17,7 +17,9 @@ services:
     # import-courts --if-empty seeds the real Chicago courts on a fresh DB and is
     # a near-instant no-op once populated. Both run at runtime where DATABASE_URL
     # is reachable, and both are idempotent.
-    startCommand: python manage.py init-db && python manage.py import-courts --if-empty && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    # import wrapped in (… || echo) so a seeding error can never block gunicorn
+    # from starting (the app boots even if the import step fails).
+    startCommand: python manage.py init-db && (python manage.py import-courts --if-empty || echo "import-courts failed, continuing") && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/health
     envVars:
       - key: SECRET_KEY
