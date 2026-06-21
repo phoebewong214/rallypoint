@@ -5,12 +5,14 @@ Query params:
     sport     "Tennis" | "Pickleball"  (default: viewer's primary sport)
     ntrpMin   float                    (default: 2.0)
     ntrpMax   float                    (default: 5.0)
+    courts    comma-separated court slugs — only players whose home court (for
+              this sport) is one of them (default: any)
 """
 from flask import Blueprint, request, jsonify
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import User, SportProfile
+from models import User, SportProfile, Court
 from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
 
@@ -48,17 +50,24 @@ def list_players():
     except (TypeError, ValueError):
         return jsonify({"error": "ntrpMin/ntrpMax must be numeric"}), 400
 
+    # Optional home-court filter: only players whose sport profile's home court
+    # is one of the selected courts.
+    court_slugs = [s.strip() for s in (request.args.get("courts") or "").split(",") if s.strip()]
+
     # selectinload the candidates' sport profiles in one batched query so the
     # per-candidate profile_for() / to_dict() below don't each fire a SELECT
     # (was an N+1 over the whole candidate pool).
-    candidates = (
+    candidates_q = (
         db.session.query(User)
         .options(selectinload(User.sport_profiles))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
         .filter(SportProfile.sport == sport)
-        .all()
     )
+    if court_slugs:
+        court_ids = [c.id for c in Court.query.filter(Court.slug.in_(court_slugs)).all()]
+        candidates_q = candidates_q.filter(SportProfile.home_court_id.in_(court_ids or [-1]))
+    candidates = candidates_q.all()
 
     results = []
     for cand in candidates:

@@ -662,6 +662,68 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--text-dim);
 }
 
+/* Court multi-select (Find Partner home-court filter) */
+.court-ms { position: relative; }
+.court-ms-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+.court-ms-btn:hover { border-color: var(--border-bright); }
+.court-ms-btn .select-caret { position: static; transform: none; margin-left: auto; }
+.court-ms-pop {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  padding: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+.court-ms-list { max-height: 260px; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; }
+.court-ms-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.court-ms-item:hover { background: var(--bg-2); }
+.court-ms-item input { accent-color: var(--green-deep); width: 15px; height: 15px; flex-shrink: 0; }
+.court-ms-name { flex: 1; min-width: 0; }
+.court-ms-dist { color: var(--text-low); font-size: 12px; font-family: var(--mono); }
+.court-ms-empty { padding: 10px 6px; color: var(--text-dim); font-size: 13px; }
+.court-ms-clear {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.court-ms-clear:hover { color: var(--text); border-color: var(--border-bright); }
+
 /* ===== Buttons ===== */
 .btn-primary {
   height: 46px;
