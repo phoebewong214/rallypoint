@@ -6,6 +6,21 @@ export type Sport = "Tennis" | "Pickleball";
 export type SportKey = "tennis" | "pickleball";
 export type NTRP = "2.0" | "2.5" | "3.0" | "3.5" | "4.0" | "4.5" | "5.0";
 
+/** A user's profile for one sport (from /me sportProfiles). */
+export interface UserSportProfile {
+  sport: Sport;
+  ntrp: string;
+  availability?: string | null;
+  homeCourtId?: number | null;
+}
+
+/** One availability cell from /me (day_of_week 0-6, time_band MORN/AFT/EVE, status 0-2). */
+export interface AvailabilitySlotDTO {
+  dayOfWeek: number;
+  timeBand: string;
+  status: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -15,7 +30,6 @@ export interface User {
   handle?: string;
   ntrp?: NTRP;
   primarySport?: Sport;
-  secondarySport?: Sport;
   location?: string;
   lat?: number;
   lng?: number;
@@ -23,6 +37,8 @@ export interface User {
   joined?: string;
   avatarColor?: string;
   avatarFg?: string;
+  sportProfiles?: UserSportProfile[];
+  availability?: AvailabilitySlotDTO[];
 }
 
 export interface SportProfile {
@@ -53,7 +69,6 @@ export interface Player {
 
 export type SessionStatus = "confirmed" | "pending" | "requested" | "completed";
 export type SessionBucket = "upcoming" | "requests" | "past";
-export type MatchResult = "W" | "L";
 
 export interface Session {
   id: number;
