@@ -85,6 +85,33 @@ def test_list_includes_regulars_and_upcoming(client, app):
     assert gp["upcomingCount"] == 1
 
 
+def test_players_filter_by_home_court(client, app):
+    """/api/players?courts=<slug> returns only players whose home court (for the
+    sport) is one of the selected courts."""
+    _make_court(app)  # grant-park
+    with app.app_context():
+        from models import Court
+        db.session.add(Court(
+            slug="welles-park", name="Welles Park", address="x", lat=41.96, lng=-87.68,
+            primary_sport="tennis", sports="Tennis", court_count=4, surface="Hard", lights=True,
+        ))
+        db.session.commit()
+    h = _signup(client, "pv@rally.app", lat=41.88, lng=-87.62)
+    with app.app_context():
+        from models import Court, User, SportProfile
+        gp = Court.query.filter_by(slug="grant-park").first()
+        cand = User(email="cand@rally.app", name="Cand Player", handle="@cand")
+        cand.set_password("rally1234")
+        db.session.add(cand)
+        db.session.flush()
+        db.session.add(SportProfile(user_id=cand.id, sport="Tennis", ntrp="3.5", home_court_id=gp.id))
+        db.session.commit()
+    r = client.get("/api/players?sport=Tennis&courts=grant-park", headers=h).get_json()
+    assert any(p["name"] == "Cand Player" for p in r["players"])
+    r2 = client.get("/api/players?sport=Tennis&courts=welles-park", headers=h).get_json()
+    assert not any(p["name"] == "Cand Player" for p in r2["players"])
+
+
 def test_create_session_with_court_records_it(client, app):
     _make_court(app)  # grant-park
     a = _signup(client, "ch@rally.app")

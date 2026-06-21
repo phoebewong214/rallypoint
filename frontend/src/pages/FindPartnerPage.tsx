@@ -3,9 +3,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
+import { useCourts } from "../hooks/useCourts";
 import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { ScheduleModal } from "../components/ScheduleModal";
+import { CourtMultiSelect } from "../components/CourtMultiSelect";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 import { ApiError } from "../api/client";
@@ -308,7 +310,7 @@ function NTRPRange({ value, onChange, label }: { value: [number, number]; onChan
   );
 }
 
-function FilterBar({ filters, setFilters, onFind }) {
+function FilterBar({ filters, setFilters, onFind, courtOptions }) {
   const setSport = (s) => setFilters((f) => ({ ...f, sport: s }));
   return (
     <div className="filter-bar">
@@ -367,6 +369,17 @@ function FilterBar({ filters, setFilters, onFind }) {
           </select>
           <span className="select-caret"><Icon name="chevron" size={16} /></span>
         </div>
+      </div>
+
+      <div className="field">
+        <label className="field-label">
+          <Icon name="pin" size={13} /> Home Court
+        </label>
+        <CourtMultiSelect
+          options={courtOptions}
+          value={filters.courts}
+          onChange={(courts) => setFilters((f) => ({ ...f, courts }))}
+        />
       </div>
 
       <button type="button" className="btn-find" onClick={onFind}>
@@ -482,14 +495,19 @@ function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
-  type Filters = { sport: Sport; ntrp: [number, number]; time: string };
+  type Filters = { sport: Sport; ntrp: [number, number]; time: string; courts: string[] };
   // Honor hints from a court's "Find partners" button: ?sport=…&court=…&courtName=…
   const [searchParams] = useSearchParams();
   const sportParam = searchParams.get("sport");
   const initialSport: Sport = sportParam === "Tennis" ? "Tennis" : "Pickleball";
   const courtSlug = searchParams.get("court") || undefined;
-  const [courtCtx, setCourtCtx] = useState(() => searchParams.get("courtName") || "");
-  const DEFAULT_FILTERS: Filters = { sport: initialSport, ntrp: [3.0, 4.0], time: "Any time" };
+  const courtCtx = searchParams.get("courtName") || "";
+  // Arriving from a court pre-selects it in the home-court filter.
+  const DEFAULT_FILTERS: Filters = {
+    sport: initialSport, ntrp: [3.0, 4.0], time: "Any time", courts: courtSlug ? [courtSlug] : [],
+  };
+  // Court options for the multi-select filter.
+  const { data: courtsData } = useCourts({});
   // `filters` is the draft the user edits; `applied` is what actually drives the
   // query + results. Editing no longer spams the backend — the "Find Partners"
   // button commits the draft.
@@ -562,6 +580,7 @@ function FindPartnerPage() {
     sport: applied.sport,
     ntrpMin: applied.ntrp[0],
     ntrpMax: applied.ntrp[1],
+    courts: applied.courts,
   });
   // `liveMatches` is the array the backend returned — which may be EMPTY (a
   // real "no matches" answer). It's null only when the backend never responded
@@ -713,26 +732,6 @@ function FindPartnerPage() {
           </div>
         </header>
 
-        {courtCtx && (
-          <div
-            role="note"
-            style={{
-              display: "flex", alignItems: "center", gap: 8, width: "fit-content",
-              padding: "7px 12px", marginBottom: 12, fontSize: 13,
-              background: "var(--green-soft)", border: "1px solid var(--green-deep)", borderRadius: 999,
-            }}
-          >
-            <Icon name="pin" size={14} />
-            <span>Partners for <b>{courtCtx}</b></span>
-            <button
-              type="button" aria-label="Clear court context" onClick={() => setCourtCtx("")}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 4 }}
-            >
-              ×
-            </button>
-          </div>
-        )}
-
         {showGuide && (
           <div
             role="note"
@@ -764,6 +763,7 @@ function FindPartnerPage() {
           filters={filters}
           setFilters={setFilters}
           onFind={() => setApplied(filters)}
+          courtOptions={courtsData?.courts ?? []}
         />
 
         <div className="results-head">
