@@ -13,6 +13,9 @@ export interface ApiCourt {
   lights: boolean;
   distance: number | null; // straight-line miles from the viewer, null if unknown
   fav: boolean;
+  regularsCount: number; // players who call this their home court
+  regulars: { initials: string; color: string | null }[]; // up to 3, for avatars
+  upcomingCount: number; // live, future games booked here
 }
 
 export interface CourtsResponse {

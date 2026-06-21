@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify
 from sqlalchemy import and_, or_
 
 from extensions import db
-from models import Session, SessionStatus, User
+from models import Court, Session, SessionStatus, User
 from schemas import CreateSessionSchema, RescheduleSessionSchema
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
@@ -75,6 +75,11 @@ def create_session():
             "error": "You already have a game in the works with this player.",
             "session": existing.to_dict(viewer.id),
         }), 409
+    # Optional court context (e.g. the request was started from a court page).
+    court_id = None
+    if data.court:
+        court = Court.query.filter_by(slug=data.court).first()
+        court_id = court.id if court else None
     s = Session(
         host_id=viewer.id,
         guest_id=data.guestId,
@@ -82,6 +87,7 @@ def create_session():
         scheduled_at=data.scheduledAt,
         status=SessionStatus.PENDING.value,
         note=data.note,
+        court_id=court_id,
     )
     db.session.add(s)
     db.session.commit()

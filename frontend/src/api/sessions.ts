@@ -25,6 +25,7 @@ export interface CreateSessionBody {
   sport: "Tennis" | "Pickleball";
   scheduledAt: string; // ISO
   note?: string;
+  court?: string; // court slug, when the request started from a court page
 }
 
 export interface RescheduleBody {

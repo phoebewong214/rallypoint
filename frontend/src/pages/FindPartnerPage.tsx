@@ -483,10 +483,12 @@ function FindPartnerPage() {
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
   type Filters = { sport: Sport; ntrp: [number, number]; time: string };
-  // Honor a ?sport= hint (e.g. arriving from a court's "Find partners" button).
+  // Honor hints from a court's "Find partners" button: ?sport=…&court=…&courtName=…
   const [searchParams] = useSearchParams();
   const sportParam = searchParams.get("sport");
   const initialSport: Sport = sportParam === "Tennis" ? "Tennis" : "Pickleball";
+  const courtSlug = searchParams.get("court") || undefined;
+  const [courtCtx, setCourtCtx] = useState(() => searchParams.get("courtName") || "");
   const DEFAULT_FILTERS: Filters = { sport: initialSport, ntrp: [3.0, 4.0], time: "Any time" };
   // `filters` is the draft the user edits; `applied` is what actually drives the
   // query + results. Editing no longer spams the backend — the "Find Partners"
@@ -521,7 +523,8 @@ function FindPartnerPage() {
       /* ignore */
     }
   }, [saved]);
-  const [sort, setSort] = useState("match");
+  // Coming from a court? Default to nearest-first (to the viewer).
+  const [sort, setSort] = useState(courtSlug ? "distance" : "match");
 
   // Dismissible "how it works" strip for first-time users.
   const [showGuide, setShowGuide] = useState(() => {
@@ -648,7 +651,7 @@ function FindPartnerPage() {
       return;
     }
     createSession.mutate(
-      { guestId: target.id, sport: applied.sport, scheduledAt: iso, note },
+      { guestId: target.id, sport: applied.sport, scheduledAt: iso, note, court: courtSlug },
       {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
@@ -709,6 +712,26 @@ function FindPartnerPage() {
             </div>
           </div>
         </header>
+
+        {courtCtx && (
+          <div
+            role="note"
+            style={{
+              display: "flex", alignItems: "center", gap: 8, width: "fit-content",
+              padding: "7px 12px", marginBottom: 12, fontSize: 13,
+              background: "var(--green-soft)", border: "1px solid var(--green-deep)", borderRadius: 999,
+            }}
+          >
+            <Icon name="pin" size={14} />
+            <span>Partners for <b>{courtCtx}</b></span>
+            <button
+              type="button" aria-label="Clear court context" onClick={() => setCourtCtx("")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 4 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {showGuide && (
           <div
@@ -816,7 +839,7 @@ function FindPartnerPage() {
       {requestTarget && (
         <ScheduleModal
           title={`Request a game with ${requestTarget.name}`}
-          subtitle={`${applied.sport} · pick a time that works for you both`}
+          subtitle={`${applied.sport}${courtCtx ? ` · at ${courtCtx}` : ""} · pick a time that works for you both`}
           submitLabel="Send request"
           busy={createSession.isPending}
           onSubmit={confirmRequest}
