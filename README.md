@@ -1,6 +1,6 @@
 # RallyPoint
 
-> AI-powered sports partner matching for college players.
+> AI-powered sports partner matching for everyday players.
 > Northwestern University · ACIS 498 Capstone
 >
 > **Live demo:** https://app.tryrallypoint.com
