@@ -3,7 +3,8 @@ Heuristic match scoring + reason generator.
 
 Score breakdown (0-100):
   60  base
-  +/- up to 25  rating closeness (NTRP for tennis, DUPR for pickleball — 0.0 diff = +25, 1.0 diff = -10)
+  +/- up to 25  rating closeness (NTRP for tennis, DUPR for pickleball —
+                0.0 diff = +25, <=0.5 = +18, <=1.0 = +5, >1.0 = -10)
   +10 same primary sport
   +10 same city/area (string match) OR within 2 mi (Haversine)
   +5  availability overlap (rough — based on availability_summary keyword match)

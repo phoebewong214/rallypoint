@@ -2,6 +2,8 @@
 
 > AI-powered sports partner matching for college players.
 > Northwestern University · ACIS 498 Capstone
+>
+> **Live demo:** https://app.tryrallypoint.com
 
 RallyPoint matches tennis and pickleball players on **skill (NTRP)**, **schedule overlap**, and **court proximity**, then explains *why* each match makes sense — heuristically by default, or via an LLM when an OpenAI key is provided.
 
@@ -76,7 +78,7 @@ The frontend reads `VITE_API_URL` from `.env.development`
 
 | Email | Password | Role |
 |---|---|---|
-| `alex@rally.app` | `rally1234` | The "you" user — has sessions + feed |
+| `alex@rally.app` | `rally1234` | The "you" user — has sessions |
 | `maya@rally.app` | `rally1234` | Pickleball 3.5, best match |
 | `jordan@rally.app` | `rally1234` | Tennis 4.0 |
 | `marcus@rally.app` | `rally1234` | Tennis 4.5 |
@@ -111,11 +113,11 @@ The frontend reads `VITE_API_URL` from `.env.development`
                                │
                      ┌─────────▼────────────────┐
                      │  SQLAlchemy ORM          │
-                     │  6 tables: users,        │
+                     │  7 tables: users,        │
                      │   sport_profiles,        │
                      │   courts, sessions,      │
                      │   availability_slots,    │
-                     │   feed_posts,            │
+                     │   court_favorites,       │
                      │   ai_match_logs          │
                      └─────────┬────────────────┘
                                │
@@ -143,7 +145,10 @@ All endpoints under `/api`. JSON in / JSON out.
 | POST | `/sessions` | JWT | create new |
 | POST | `/sessions/<id>/accept` | JWT | guest only |
 | POST | `/sessions/<id>/decline` | JWT | guest only |
-| POST | `/ai/match-reason` | JWT | heuristic or LLM |
+| POST | `/ai/match-reason` | JWT | heuristic or LLM (not yet wired to UI) |
+| GET | `/courts?sport=&q=` | JWT | real courts + distance/regulars/upcoming |
+| GET | `/courts/<slug>` | JWT | single court |
+| POST/DELETE | `/courts/<slug>/favorite` | JWT | (un)favorite a court |
 
 ---
 
@@ -166,7 +171,7 @@ rallypoint/
 │       ├── hooks/           ← TanStack Query hooks
 │       ├── contexts/        ← Auth + Theme
 │       ├── components/      ← ProtectedRoute, etc.
-│       ├── pages/           ← 7 routes
+│       ├── pages/           ← 9 route components
 │       ├── types/           ← shared TS types
 │       ├── rally-shared.tsx ← TopNav + Icon + Avatar
 │       └── rally-shared.css ← design tokens + all CSS
@@ -178,8 +183,8 @@ rallypoint/
     ├── requirements.txt
     ├── seed.py              ← drop + create + sample data
     ├── .env.example
-    ├── models/              ← 6 SQLAlchemy models
-    ├── routes/              ← 4 blueprints (auth/players/sessions/ai)
+    ├── models/              ← 7 SQLAlchemy models
+    ├── routes/              ← 5 blueprints (auth/players/sessions/courts/ai)
     ├── schemas/             ← Pydantic request bodies
     ├── services/            ← auth (JWT), matching (AI)
     ├── utils/               ← @require_auth, parse_json
@@ -207,8 +212,8 @@ CI runs both on every push — see `.github/workflows/ci.yml`.
 
 ## Roadmap
 
-- [ ] Switch SQLite → Postgres in deployment
-- [ ] Geocoded distance (Haversine on user lat/lng)
+- [x] Switch SQLite → Postgres in deployment (live on Render)
+- [x] Geocoded distance (Haversine on court lat/lng)
 - [ ] WebSocket presence for "online now"
 - [ ] OAuth (Google) instead of email/password
 - [ ] Mobile bottom tab bar
@@ -222,4 +227,4 @@ MIT — see [LICENSE](./LICENSE) (TODO).
 
 ## Authors
 
-- Phoebe Wang ([@phoebewang](https://github.com/phoebewang))
+- Phoebe Wang ([@phoebewong214](https://github.com/phoebewong214))
