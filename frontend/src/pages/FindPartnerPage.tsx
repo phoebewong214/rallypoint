@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
@@ -483,7 +483,11 @@ function FindPartnerPage() {
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
   type Filters = { sport: Sport; ntrp: [number, number]; time: string };
-  const DEFAULT_FILTERS: Filters = { sport: "Pickleball", ntrp: [3.0, 4.0], time: "Any time" };
+  // Honor a ?sport= hint (e.g. arriving from a court's "Find partners" button).
+  const [searchParams] = useSearchParams();
+  const sportParam = searchParams.get("sport");
+  const initialSport: Sport = sportParam === "Tennis" ? "Tennis" : "Pickleball";
+  const DEFAULT_FILTERS: Filters = { sport: initialSport, ntrp: [3.0, 4.0], time: "Any time" };
   // `filters` is the draft the user edits; `applied` is what actually drives the
   // query + results. Editing no longer spams the backend — the "Find Partners"
   // button commits the draft.

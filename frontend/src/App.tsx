@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -11,8 +11,11 @@ import VerifyPendingPage from "./pages/VerifyPendingPage";
 import FindPartnerPage from "./pages/FindPartnerPage";
 import ProfilePage from "./pages/ProfilePage";
 import SessionsPage from "./pages/SessionsPage";
-import CourtsPage from "./pages/CourtsPage";
 import SchedulePage from "./pages/SchedulePage";
+
+// Code-split the Courts page: it pulls in Leaflet (~150KB gz), which no other
+// page needs — keeping it out of the main bundle.
+const CourtsPage = React.lazy(() => import("./pages/CourtsPage"));
 
 /* Redirect logged-in users away from the login page. */
 const PublicOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,7 +44,16 @@ function App() {
           <Route path="/find"     element={<ProtectedRoute><FindPartnerPage /></ProtectedRoute>} />
           <Route path="/profile"  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/sessions" element={<ProtectedRoute><SessionsPage /></ProtectedRoute>} />
-          <Route path="/courts"   element={<ProtectedRoute><CourtsPage /></ProtectedRoute>} />
+          <Route
+            path="/courts"
+            element={
+              <ProtectedRoute>
+                <Suspense fallback={<div className="page" style={{ minHeight: "60vh" }} />}>
+                  <CourtsPage />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

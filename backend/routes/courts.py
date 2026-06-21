@@ -1,14 +1,21 @@
 """
-GET /api/courts — list Chicago courts.
+Courts REST endpoints.
 
-Query params:
-    sport      "Tennis" | "Pickleball"  (default: all)
-    q          search term, matches name + address (default: none)
+GET    /api/courts                 list courts (real distance from the viewer + fav flag)
+GET    /api/courts/<slug>          single court
+POST   /api/courts/<slug>/favorite favorite a court
+DELETE /api/courts/<slug>/favorite un-favorite a court
+
+Query params for list:
+    sport   "Tennis" | "Pickleball"  (default: all)
+    q       search term, matches name + address (default: none)
 """
 from flask import Blueprint, request, jsonify
+
 from extensions import db
-from models import Court
-from utils.decorators import require_auth
+from models import Court, CourtFavorite
+from services.matching import haversine_miles
+from utils.decorators import require_auth, current_user
 
 courts_bp = Blueprint("courts", __name__)
 
@@ -16,30 +23,15 @@ courts_bp = Blueprint("courts", __name__)
 @courts_bp.get("")
 @require_auth
 def list_courts():
-    """
-    List courts visible to the authenticated user.
-    ---
-    tags: [Courts]
-    security:
-      - Bearer: []
-    parameters:
-      - {in: query, name: sport, type: string, enum: [Tennis, Pickleball]}
-      - {in: query, name: q,     type: string, description: search by name or address}
-    responses:
-      200:
-        description: Courts list
-        schema:
-          type: object
-          properties:
-            courts: {type: array, items: {type: object}}
-            count:  {type: integer}
-      401: {description: Missing/invalid token}
-    """
+    """List courts with the viewer's real straight-line distance + fav flag,
+    nearest first. No fabricated activity/availability — only fields we can
+    actually source."""
+    viewer = current_user()
     sport = request.args.get("sport")
     q = (request.args.get("q") or "").strip().lower()
 
-    query = db.session.query(Court)
-    rows = query.all()
+    rows = db.session.query(Court).all()
+    fav_ids = {f.court_id for f in CourtFavorite.query.filter_by(user_id=viewer.id).all()}
 
     results = []
     for c in rows:
@@ -48,6 +40,7 @@ def list_courts():
             continue
         if q and q not in c.name.lower() and q not in (c.address or "").lower():
             continue
+        dist = haversine_miles(viewer.lat, viewer.lng, c.lat, c.lng)
         results.append({
             "id": c.slug,
             "name": c.name,
@@ -59,26 +52,39 @@ def list_courts():
             "courtCount": c.court_count,
             "surface": c.surface,
             "lights": c.lights,
+            "distance": round(dist, 1) if dist is not None else None,
+            "fav": c.id in fav_ids,
         })
 
+    # Nearest first; courts with unknown distance (viewer/court missing coords)
+    # sort to the end rather than pretending to be at distance 0.
+    results.sort(key=lambda r: (r["distance"] is None, r["distance"] or 0.0))
     return jsonify({"courts": results, "count": len(results)})
 
 
 @courts_bp.get("/<slug>")
 @require_auth
 def get_court(slug: str):
-    """
-    Get a single court by slug.
-    ---
-    tags: [Courts]
-    security:
-      - Bearer: []
-    parameters:
-      - {in: path, name: slug, type: string, required: true}
-    responses:
-      200: {description: Court detail}
-      401: {description: Missing/invalid token}
-      404: {description: Court not found}
-    """
     c = Court.query.filter_by(slug=slug).first_or_404()
     return jsonify({"court": c.to_dict()})
+
+
+@courts_bp.post("/<slug>/favorite")
+@require_auth
+def favorite_court(slug: str):
+    viewer = current_user()
+    c = Court.query.filter_by(slug=slug).first_or_404()
+    if not CourtFavorite.query.filter_by(user_id=viewer.id, court_id=c.id).first():
+        db.session.add(CourtFavorite(user_id=viewer.id, court_id=c.id))
+        db.session.commit()
+    return jsonify({"id": slug, "fav": True})
+
+
+@courts_bp.delete("/<slug>/favorite")
+@require_auth
+def unfavorite_court(slug: str):
+    viewer = current_user()
+    c = Court.query.filter_by(slug=slug).first_or_404()
+    CourtFavorite.query.filter_by(user_id=viewer.id, court_id=c.id).delete()
+    db.session.commit()
+    return jsonify({"id": slug, "fav": False})

@@ -17,6 +17,8 @@ export interface User {
   primarySport?: Sport;
   secondarySport?: Sport;
   location?: string;
+  lat?: number;
+  lng?: number;
   bio?: string;
   joined?: string;
   avatarColor?: string;
@@ -71,24 +73,6 @@ export interface Session {
   note?: string;
 }
 
-export type CourtActivity = "busy" | "open" | "quiet";
-
-export interface Court {
-  id: string;
-  name: string;
-  addr: string;
-  sports: Sport[];
-  primary: SportKey;
-  distance: string;
-  walk: string;
-  courtCount: number;
-  surface: string;
-  lights: boolean;
-  activity: { state: CourtActivity; pct: number; label: string };
-  nextSlot: string;
-  fav: boolean;
-  pin: { x: number; y: number; state: CourtActivity };
-}
 
 export type IconName =
   | "search"
