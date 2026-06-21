@@ -83,6 +83,11 @@ function CourtCard({
           aria-label={c.name}
         />
         <div className="hero-badges">
+          {c.hereNow > 0 && (
+            <span className="hero-badge" style={{ background: "var(--green)", borderColor: "var(--green-deep)", color: "var(--green-ink)" }}>
+              ● {c.hereNow} here now
+            </span>
+          )}
           {c.sports.map((s) => (
             <span key={s} className="hero-badge">{s}</span>
           ))}
@@ -101,7 +106,11 @@ function CourtCard({
       <div className="court-body">
         <div className="court-row">
           <div style={{ minWidth: 0 }}>
-            <h3 className="court-name">{c.name}</h3>
+            <h3 className="court-name">
+              <Link to={`/courts/${encodeURIComponent(c.id)}`} onClick={(e) => e.stopPropagation()} style={{ color: "inherit", textDecoration: "none" }}>
+                {c.name}
+              </Link>
+            </h3>
             <span className="court-addr">
               <Icon name="pin" size={12} /> {c.addr}
             </span>
@@ -153,11 +162,12 @@ function CourtCard({
             </button>
             <Link
               className="court-btn book"
-              to={findHref}
+              to={`/courts/${encodeURIComponent(c.id)}`}
               onClick={(e) => e.stopPropagation()}
               style={{ textDecoration: "none" }}
             >
-              <Icon name="search" size={13} stroke={2.4} /> Find partners
+              <Icon name="calendar" size={13} stroke={2.4} />
+              {c.openGames > 0 ? `${c.openGames} open game${c.openGames === 1 ? "" : "s"}` : "View court"}
             </Link>
           </div>
         </div>
