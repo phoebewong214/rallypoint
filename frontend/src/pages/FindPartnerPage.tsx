@@ -310,7 +310,7 @@ function NTRPRange({ value, onChange, label }: { value: [number, number]; onChan
   );
 }
 
-function FilterBar({ filters, setFilters, onFind, courtOptions }) {
+function FilterBar({ filters, setFilters, courtOptions }) {
   const setSport = (s) => setFilters((f) => ({ ...f, sport: s }));
   return (
     <div className="filter-bar">
@@ -381,11 +381,6 @@ function FilterBar({ filters, setFilters, onFind, courtOptions }) {
           onChange={(courts) => setFilters((f) => ({ ...f, courts }))}
         />
       </div>
-
-      <button type="button" className="btn-find" onClick={onFind}>
-        <Icon name="search" size={16} stroke={2.5} />
-        Find Partners
-      </button>
     </div>
   );
 }
@@ -508,11 +503,15 @@ function FindPartnerPage() {
   };
   // Court options for the multi-select filter.
   const { data: courtsData } = useCourts({});
-  // `filters` is the draft the user edits; `applied` is what actually drives the
-  // query + results. Editing no longer spams the backend — the "Find Partners"
-  // button commits the draft.
+  // `filters` is what the user edits; `applied` drives the query + results.
+  // No "Find" button — applied tracks filters live, debounced 300ms so dragging
+  // the NTRP slider doesn't fire a request on every step.
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [applied, setApplied] = useState<Filters>(DEFAULT_FILTERS);
+  useEffect(() => {
+    const t = setTimeout(() => setApplied(filters), 300);
+    return () => clearTimeout(t);
+  }, [filters]);
 
   const myRatingLabel = ratingLabel(applied.sport);
   // Real NTRP/DUPR for the searched sport, read from the user's sport profiles
@@ -762,7 +761,6 @@ function FindPartnerPage() {
         <FilterBar
           filters={filters}
           setFilters={setFilters}
-          onFind={() => setApplied(filters)}
           courtOptions={courtsData?.courts ?? []}
         />
 
