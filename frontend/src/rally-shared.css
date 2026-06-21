@@ -3351,6 +3351,74 @@ textarea:focus-visible,
 }
 .court-upcoming { color: var(--green-deep); }
 
+/* ---- Court detail page ---- */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.back-link svg { transform: rotate(90deg); }
+.back-link:hover { color: var(--text); }
+
+.checkin-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.checkin-sub { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+
+.appt-list { display: flex; flex-direction: column; gap: 10px; }
+.appt-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.appt-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.appt-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.appt-sport {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.appt-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+.appt-count { font-weight: 600; }
+.appt-wait { color: var(--green-deep); }
+.appt-host { font-size: 12.5px; color: var(--text-low); }
+.appt-action { flex-shrink: 0; }
+.appt-queue { font-size: 12px; font-weight: 700; color: var(--green-deep); margin-bottom: 4px; }
+
+@media (max-width: 560px) {
+  .appt-card { flex-direction: column; align-items: stretch; }
+  .checkin-bar { flex-direction: column; align-items: stretch; }
+}
+
 .court-activity {
   display: flex;
   align-items: center;

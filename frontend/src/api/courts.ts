@@ -16,6 +16,8 @@ export interface ApiCourt {
   regularsCount: number; // players who call this their home court
   regulars: { initials: string; color: string | null }[]; // up to 3, for avatars
   upcomingCount: number; // live, future games booked here
+  hereNow: number; // active check-ins ("here now")
+  openGames: number; // upcoming open appointments anyone can join
 }
 
 export interface CourtsResponse {

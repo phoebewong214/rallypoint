@@ -13,9 +13,10 @@ import ProfilePage from "./pages/ProfilePage";
 import SessionsPage from "./pages/SessionsPage";
 import SchedulePage from "./pages/SchedulePage";
 
-// Code-split the Courts page: it pulls in Leaflet (~150KB gz), which no other
+// Code-split the Courts pages: they pull in Leaflet (~150KB gz), which no other
 // page needs — keeping it out of the main bundle.
 const CourtsPage = React.lazy(() => import("./pages/CourtsPage"));
+const CourtDetailPage = React.lazy(() => import("./pages/CourtDetailPage"));
 
 /* Redirect logged-in users away from the login page. */
 const PublicOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,6 +51,16 @@ function App() {
               <ProtectedRoute>
                 <Suspense fallback={<div className="page" style={{ minHeight: "60vh" }} />}>
                   <CourtsPage />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/courts/:slug"
+            element={
+              <ProtectedRoute>
+                <Suspense fallback={<div className="page" style={{ minHeight: "60vh" }} />}>
+                  <CourtDetailPage />
                 </Suspense>
               </ProtectedRoute>
             }
