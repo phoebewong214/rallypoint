@@ -7,7 +7,7 @@ import type { IconName, NavId } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
 
-type IconProps = SVGProps<SVGSVGElement> & {
+type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke"> & {
   name: IconName;
   size?: number;
   stroke?: number;
