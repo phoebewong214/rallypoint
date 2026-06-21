@@ -20,6 +20,7 @@ class CreateSessionSchema(BaseModel):
     sport: Literal["Tennis", "Pickleball"]
     scheduledAt: datetime
     note: Optional[str] = Field(default=None, max_length=500)
+    court: Optional[str] = Field(default=None, max_length=80)  # court slug, optional
 
     _future = field_validator("scheduledAt")(_validate_future)
 

@@ -68,6 +68,7 @@ function CourtCard({
     const q = encodeURIComponent(`${c.name} ${c.addr}`);
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener");
   };
+  const findHref = `/find?sport=${sportToParam(c.primary)}&court=${encodeURIComponent(c.id)}&courtName=${encodeURIComponent(c.name)}`;
   return (
     <article
       className={"court-card" + (active ? " active" : "")}
@@ -114,10 +115,36 @@ function CourtCard({
         </div>
 
         <div className="court-feats">
-          <span className="feat"><Icon name="stats" size={11} /> {c.courtCount} courts</span>
-          <span className="feat">{c.surface}</span>
+          {c.courtCount ? <span className="feat"><Icon name="stats" size={11} /> {c.courtCount} courts</span> : null}
+          {c.surface ? <span className="feat">{c.surface}</span> : null}
           {c.lights && <span className="feat"><Icon name="bolt" size={11} /> Lit</span>}
         </div>
+
+        {(c.regularsCount > 0 || c.upcomingCount > 0) && (
+          <Link to={findHref} onClick={(e) => e.stopPropagation()} className="court-social">
+            {c.regularsCount > 0 && (
+              <span className="court-regulars">
+                <span className="avatar-stack">
+                  {c.regulars.map((r, i) => (
+                    <span
+                      key={i}
+                      className="avatar-chip"
+                      style={{ background: r.color || "var(--bg-3)", marginLeft: i ? -8 : 0 }}
+                    >
+                      {r.initials}
+                    </span>
+                  ))}
+                </span>
+                {c.regularsCount} {c.regularsCount === 1 ? "player calls" : "players call"} this home
+              </span>
+            )}
+            {c.upcomingCount > 0 && (
+              <span className="court-upcoming">
+                {c.regularsCount > 0 ? "· " : ""}{c.upcomingCount} game{c.upcomingCount === 1 ? "" : "s"} coming up
+              </span>
+            )}
+          </Link>
+        )}
 
         <div className="court-foot">
           <div className="court-actions" style={{ marginLeft: "auto" }}>
@@ -126,7 +153,7 @@ function CourtCard({
             </button>
             <Link
               className="court-btn book"
-              to={`/find?sport=${sportToParam(c.primary)}`}
+              to={findHref}
               onClick={(e) => e.stopPropagation()}
               style={{ textDecoration: "none" }}
             >
