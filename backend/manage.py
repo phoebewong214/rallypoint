@@ -58,7 +58,7 @@ def build_courts_cmd():
 
 def import_courts_cmd():
     from import_courts import load
-    load()
+    load(only_if_empty="--if-empty" in sys.argv)
 
 
 COMMANDS = {
