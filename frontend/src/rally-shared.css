@@ -683,13 +683,14 @@ button, input, select, textarea { font-family: inherit; }
 .court-ms-btn .select-caret { position: static; transform: none; margin-left: auto; }
 .court-ms-pop {
   position: absolute;
-  z-index: 50;
+  z-index: 1000;
   top: calc(100% + 6px);
-  left: 0;
   right: 0;
-  min-width: 240px;
+  left: auto;
+  width: 300px;
+  max-width: 80vw;
   padding: 10px;
-  background: var(--bg-1);
+  background: var(--card);
   border: 1px solid var(--border-bright);
   border-radius: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
@@ -1282,7 +1283,7 @@ button, input, select, textarea { font-family: inherit; }
   border-radius: 16px;
   padding: 20px;
   display: grid;
-  grid-template-columns: 1.1fr 1.4fr 1.1fr auto;
+  grid-template-columns: 1.1fr 1.4fr 1.1fr 1.1fr;
   gap: 18px;
   align-items: end;
   box-shadow: 0 12px 32px -16px rgba(15, 23, 42, 0.12), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
