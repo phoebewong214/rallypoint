@@ -182,8 +182,12 @@ def build():
     print(f"  wrote {len(courts)} court facilities to {DATA_PATH} (skipped {orphans} pitches with no park)")
 
 
-def load():
-    """Upsert the built dataset into the courts table. Idempotent; never deletes."""
+def load(only_if_empty: bool = False):
+    """Upsert the built dataset into the courts table. Idempotent; never deletes.
+
+    only_if_empty=True is for the deploy startCommand: it loads on a fresh DB but
+    is a near-instant no-op once courts exist, so it doesn't slow cold starts.
+    """
     from app import create_app
     from extensions import db
     from models import Court
@@ -193,6 +197,9 @@ def load():
 
     app = create_app()
     with app.app_context():
+        if only_if_empty and Court.query.count() > 0:
+            print(f"import-courts: {Court.query.count()} courts already present — skipping.")
+            return
         added = updated = 0
         for row in data:
             c = Court.query.filter_by(slug=row["slug"]).first()
