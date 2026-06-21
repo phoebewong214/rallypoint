@@ -9,7 +9,7 @@ from app import create_app
 from extensions import db
 from models import (
     User, SportProfile, Court, Session, SessionStatus,
-    AvailabilitySlot, FeedPost, FeedType,
+    AvailabilitySlot,
 )
 
 
@@ -119,19 +119,6 @@ def _seed():
                 status=SessionStatus.CONFIRMED.value),
     ]
     db.session.add_all(sessions)
-
-    # Feed posts
-    db.session.add_all([
-        FeedPost(author_id=maya.id, type=FeedType.MATCH_WIN.value,
-                 text="Third shot drop is finally clicking. Took two sets vs Alex this morning.",
-                 likes=24, comments=5, shares=2),
-        FeedPost(author_id=jordan.id, type=FeedType.LFG.value,
-                 text="Anyone up for a hit Saturday morning? Looking for 3.5-4.0 level.",
-                 likes=7, comments=4, shares=1),
-        FeedPost(author_id=marcus.id, type=FeedType.ACHIEVEMENT.value,
-                 text="Five in a row. Don't @ me about the 5-7 third set last night.",
-                 likes=41, comments=12, shares=3),
-    ])
 
     db.session.commit()
     print(f"Seeded {len(users)} users, {len(courts)} courts, {len(sessions)} sessions.")

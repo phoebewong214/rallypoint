@@ -145,7 +145,6 @@ interface NavLinkDef {
 const NAV_LINKS: NavLinkDef[] = [
   { id: "find",     label: "Find Partners", to: "/find" },
   { id: "matches",  label: "My Games",      to: "/sessions" },
-  { id: "feed",     label: "Feed",          to: "/feed" },
   { id: "courts",   label: "Courts",        to: "/courts" },
   { id: "schedule", label: "Schedule",      to: "/schedule" },
 ];

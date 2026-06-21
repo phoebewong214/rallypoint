@@ -90,52 +90,6 @@ export interface Court {
   pin: { x: number; y: number; state: CourtActivity };
 }
 
-export type FeedType =
-  | "match-win"
-  | "match-loss"
-  | "join"
-  | "lfg"
-  | "achievement"
-  | "photo";
-
-export interface FeedUser {
-  name: string;
-  handle: string;
-  initials: string;
-  verified?: boolean;
-  isMe?: boolean;
-}
-
-export interface MatchEmbed {
-  left: { name: string; inits: string; ntrp: string; win: boolean };
-  right: { name: string; inits: string; ntrp: string; win: boolean };
-  score: string;
-}
-
-export interface FeedItem {
-  id: number;
-  type: FeedType;
-  user: FeedUser;
-  time: string;
-  sub?: string;
-  text: string;
-  match?: MatchEmbed;
-  lfg?: { chips: { icon: IconName; text: string }[] };
-  achievement?: { title: string; sub: string };
-  newPlayer?: {
-    name: string;
-    inits: string;
-    ntrp: string;
-    sport: Sport;
-    area: string;
-  };
-  image?: string;
-  likes: number;
-  comments: number;
-  shares: number;
-  liked?: boolean;
-}
-
 export type IconName =
   | "search"
   | "pin"
@@ -173,4 +127,4 @@ export type IconName =
   | "moon"
   | "menu";
 
-export type NavId = "find" | "matches" | "feed" | "courts" | "schedule";
+export type NavId = "find" | "matches" | "courts" | "schedule";

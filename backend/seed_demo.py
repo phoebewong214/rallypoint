@@ -108,15 +108,15 @@ def seed_demo(count=40):
 
 def unseed_demo():
     """Remove the virtual demo users (email @demo.tryrallypoint.com) and every
-    row that references them — sessions, AI match logs, feed posts, plus their
-    own sport profiles / availability (ORM cascade). Real users are NEVER
-    touched (they have other email domains). Idempotent: safe to re-run.
+    row that references them — sessions, AI match logs, plus their own sport
+    profiles / availability (ORM cascade). Real users are NEVER touched (they
+    have other email domains). Idempotent: safe to re-run.
 
     Run against prod the same way as seed-demo:
         DATABASE_URL="<Render EXTERNAL url>" python manage.py unseed-demo
     """
     from sqlalchemy import or_
-    from models import Session, FeedPost, AIMatchLog
+    from models import Session, AIMatchLog
 
     app = create_app()
     with app.app_context():
@@ -126,18 +126,8 @@ def unseed_demo():
             print("unseed-demo: no demo users found — nothing to remove.")
             return
 
-        session_ids = [
-            s.id for s in Session.query.filter(
-                or_(Session.host_id.in_(ids), Session.guest_id.in_(ids))
-            ).all()
-        ]
-
         # Delete rows that reference the demo users BEFORE the users themselves,
         # so FK constraints (enforced on Postgres) are never violated.
-        post_conds = [FeedPost.author_id.in_(ids)]
-        if session_ids:
-            post_conds.append(FeedPost.match_id.in_(session_ids))
-        posts = FeedPost.query.filter(or_(*post_conds)).delete(synchronize_session=False)
         logs = AIMatchLog.query.filter(
             or_(AIMatchLog.viewer_id.in_(ids), AIMatchLog.candidate_id.in_(ids))
         ).delete(synchronize_session=False)
@@ -150,6 +140,6 @@ def unseed_demo():
         db.session.commit()
         print(
             f"unseed-demo: removed {len(ids)} demo users "
-            f"(+{sess} sessions, {logs} match-logs, {posts} feed posts). "
+            f"(+{sess} sessions, {logs} match-logs). "
             f"Users left: {User.query.count()}."
         )

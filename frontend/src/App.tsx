@@ -11,7 +11,6 @@ import VerifyPendingPage from "./pages/VerifyPendingPage";
 import FindPartnerPage from "./pages/FindPartnerPage";
 import ProfilePage from "./pages/ProfilePage";
 import SessionsPage from "./pages/SessionsPage";
-import FeedPage from "./pages/FeedPage";
 import CourtsPage from "./pages/CourtsPage";
 import SchedulePage from "./pages/SchedulePage";
 
@@ -42,7 +41,6 @@ function App() {
           <Route path="/find"     element={<ProtectedRoute><FindPartnerPage /></ProtectedRoute>} />
           <Route path="/profile"  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/sessions" element={<ProtectedRoute><SessionsPage /></ProtectedRoute>} />
-          <Route path="/feed"     element={<ProtectedRoute><FeedPage /></ProtectedRoute>} />
           <Route path="/courts"   element={<ProtectedRoute><CourtsPage /></ProtectedRoute>} />
           <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
