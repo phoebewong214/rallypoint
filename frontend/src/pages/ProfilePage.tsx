@@ -5,23 +5,47 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useSessions } from "../hooks/useSessions";
 import { useCourts } from "../hooks/useCourts";
+import { useSavedPlayers, useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { Spinner } from "../components/Skeleton";
 import type { Sport } from "../types";
 
+const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
+
+interface EditForm {
+  name: string;
+  bio: string;
+  location: string;
+  primarySport: "Tennis" | "Pickleball";
+  primaryNtrp: string;
+  alsoPlay: boolean;
+  secondaryNtrp: string;
+}
+
 interface EditModalProps {
-  initial: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" };
+  initial: EditForm;
   onClose: () => void;
-  onSave: (patch: EditModalProps["initial"]) => Promise<void>;
+  onSave: (patch: {
+    name: string; bio: string; location: string;
+    primarySport: "Tennis" | "Pickleball";
+    sportProfiles: { sport: "Tennis" | "Pickleball"; ntrp: string }[];
+  }) => Promise<void>;
 }
 
 function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
-  const set = (k: keyof typeof form) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
+  const set = (k: keyof EditForm) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
+  const otherSport: "Tennis" | "Pickleball" = form.primarySport === "Tennis" ? "Pickleball" : "Tennis";
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(form); } finally { setSaving(false); }
+    try {
+      const sportProfiles = [{ sport: form.primarySport, ntrp: form.primaryNtrp }];
+      if (form.alsoPlay) sportProfiles.push({ sport: otherSport, ntrp: form.secondaryNtrp });
+      await onSave({ name: form.name, bio: form.bio, location: form.location, primarySport: form.primarySport, sportProfiles });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -47,6 +71,32 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
               <button type="button" className={"pill" + (form.primarySport === "Tennis" ? " active" : "")} onClick={() => set("primarySport")("Tennis")}>Tennis</button>
             </div>
           </div>
+          <div className="field">
+            <label className="field-label"><Icon name="bolt" size={13} /> {ratingLabel(form.primarySport)} ({form.primarySport})</label>
+            <div className="select">
+              <select value={form.primaryNtrp} onChange={set("primaryNtrp")}>
+                {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <span className="select-caret"><Icon name="chevron" size={16} /></span>
+            </div>
+          </div>
+          <div className="field">
+            <label className="checkbox-row">
+              <input type="checkbox" checked={form.alsoPlay} onChange={(e) => set("alsoPlay")(e.target.checked)} />
+              <span>I also play {otherSport}</span>
+            </label>
+          </div>
+          {form.alsoPlay && (
+            <div className="field">
+              <label className="field-label"><Icon name="sparkles" size={13} /> {ratingLabel(otherSport)} ({otherSport})</label>
+              <div className="select">
+                <select value={form.secondaryNtrp} onChange={set("secondaryNtrp")}>
+                  {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <span className="select-caret"><Icon name="chevron" size={16} /></span>
+              </div>
+            </div>
+          )}
           <div className="field">
             <label className="field-label"><Icon name="edit" size={13} /> Bio</label>
             <textarea className="textarea" value={form.bio} onChange={set("bio")} placeholder="Tell other players a bit about your game…" maxLength={1000} />
@@ -86,7 +136,12 @@ function ProfilePage() {
   const { data: courtsData } = useCourts({});
   const favCourts = (courtsData?.courts ?? []).filter((c) => c.fav);
 
-  const handleSave = async (patch: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" }) => {
+  // Saved players — real, from the backend.
+  const { data: savedData } = useSavedPlayers();
+  const savedPlayers = savedData?.players ?? [];
+  const toggleSaved = useToggleSavedPlayer();
+
+  const handleSave = async (patch: Parameters<EditModalProps["onSave"]>[0]) => {
     try {
       await updateProfile(patch);
       setEditOpen(false);
@@ -238,6 +293,37 @@ function ProfilePage() {
               </div>
             </div>
 
+            {/* Saved players */}
+            <div className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title"><span className="ico green"><Icon name="users" size={15} /></span> Saved players</h2>
+                <Link className="panel-action" to="/find">Find <Icon name="chevron-r" size={13} /></Link>
+              </div>
+              {savedPlayers.length === 0 ? (
+                <p className="empty-sub" style={{ margin: "4px 0 0" }}>No saved players yet. Tap the bookmark on a partner in <Link to="/find" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find a partner →</Link></p>
+              ) : (
+                <div className="saved-player-list">
+                  {savedPlayers.map((p) => (
+                    <div key={p.id} className="saved-player">
+                      <span className="avatar-chip" style={{ background: p.color || "var(--bg-3)" }}>{p.initials}</span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="sp-name">{p.name}</div>
+                        <div className="sp-meta">{p.sports.join(" · ") || p.primarySport}</div>
+                      </div>
+                      <button
+                        className="btn-sm icon-only"
+                        type="button"
+                        aria-label={`Remove ${p.name} from saved`}
+                        onClick={() => toggleSaved.mutate({ id: p.id, saved: false })}
+                      >
+                        <Icon name="x" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Favorite courts */}
             <div className="panel">
               <div className="panel-head">
@@ -268,6 +354,9 @@ function ProfilePage() {
             bio: authUser?.bio ?? "",
             location: authUser?.location ?? "",
             primarySport: (primarySport as "Tennis" | "Pickleball") ?? "Pickleball",
+            primaryNtrp: primaryProfile?.ntrp ?? "3.5",
+            alsoPlay: otherProfiles.length > 0,
+            secondaryNtrp: otherProfiles[0]?.ntrp ?? "3.5",
           }}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}

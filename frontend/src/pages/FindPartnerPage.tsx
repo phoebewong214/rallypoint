@@ -4,6 +4,7 @@ import type { Sport } from "../types";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { usePlayers } from "../hooks/usePlayers";
 import { useCourts } from "../hooks/useCourts";
+import { useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { ScheduleModal } from "../components/ScheduleModal";
@@ -523,23 +524,9 @@ function FindPartnerPage() {
     myProfiles?.find((p) => (p.sport || "").toLowerCase() === applied.sport.toLowerCase())?.ntrp ??
     "—";
   const [requested, setRequested] = useState(new Set());
-  // Saved players persist locally so a bookmark survives a refresh (there's no
-  // backend saved-players table yet — this is an honest local-only shortlist).
-  const [saved, setSaved] = useState<Set<number>>(() => {
-    try {
-      const raw = localStorage.getItem("rallypoint.saved");
-      return new Set(raw ? JSON.parse(raw) : []);
-    } catch {
-      return new Set();
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem("rallypoint.saved", JSON.stringify([...saved]));
-    } catch {
-      /* ignore */
-    }
-  }, [saved]);
+  // Saved players are backed by the server (per-player `saved` flag), toggled
+  // with an optimistic mutation — survives refresh and shows on the Profile page.
+  const toggleSaved = useToggleSavedPlayer();
   // Coming from a court? Default to nearest-first (to the viewer).
   const [sort, setSort] = useState(courtSlug ? "distance" : "match");
 
@@ -602,7 +589,7 @@ function FindPartnerPage() {
           id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
           online: p.online, location: p.location, distance: p.distance,
           sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
-          matchScore: p.matchScore, reason: p.reason,
+          matchScore: p.matchScore, reason: p.reason, saved: p.saved,
           altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
       });
@@ -617,7 +604,7 @@ function FindPartnerPage() {
             id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
             online: p.online, location: p.location, distance: p.distance,
             sport: applied.sport, ntrp: prof.ntrp, availability: prof.availability,
-            matchScore: prof.matchScore, reason: prof.reason, altSport: alt,
+            matchScore: prof.matchScore, reason: prof.reason, altSport: alt, saved: false,
           };
         })
         .filter((p) => {
@@ -825,9 +812,12 @@ function FindPartnerPage() {
                 key={p.id}
                 player={p}
                 requested={requested.has(p.id) || activePartnerIds.has(p.id)}
-                saved={saved.has(p.id)}
+                saved={!!p.saved}
                 onRequest={handleRequest}
-                onSave={toggle(saved, setSaved)}
+                onSave={(id: number) => {
+                  if (dataSource !== "live") { show("Connect to save players", "info"); return; }
+                  toggleSaved.mutate({ id, saved: !p.saved });
+                }}
               />
             ))}
           </div>

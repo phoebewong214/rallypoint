@@ -1845,6 +1845,17 @@ textarea:focus-visible,
 .fav-court-name { font-size: 13.5px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fav-court-meta { font-size: 12px; color: var(--text-low); font-family: var(--mono); white-space: nowrap; }
 
+/* Saved players list (Profile) */
+.saved-player-list { display: flex; flex-direction: column; gap: 4px; }
+.saved-player { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.saved-player .avatar-chip { width: 34px; height: 34px; font-size: 12px; border: none; flex-shrink: 0; }
+.sp-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-meta { font-size: 12px; color: var(--text-dim); }
+
+/* Edit-profile checkbox row */
+.checkbox-row { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }
+.checkbox-row input { accent-color: var(--green-deep); width: 16px; height: 16px; }
+
 .match-list {
   display: flex;
   flex-direction: column;

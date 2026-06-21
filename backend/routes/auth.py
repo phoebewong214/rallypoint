@@ -3,7 +3,7 @@ Auth endpoints — JWT-based.
 
 POST /api/auth/signup  body: {email, password, name, sport?, ntrp?, location?}
 POST /api/auth/login   body: {email, password}
-GET  /api/auth/me      header: Authorization: Bearer <jwt>
+GET  /api/auth/me      cookie: rp_session (or Authorization: Bearer <jwt>)
 """
 import re
 from flask import Blueprint, jsonify, request, current_app, make_response
@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
-from models import User, SportProfile
+from models import User, SportProfile, Court
 from schemas import (
     LoginSchema,
     SignupSchema,
@@ -215,6 +215,32 @@ def update_me():
         user.location = data.location
     if data.primarySport is not None:
         user.primary_sport = data.primarySport
+    if data.sportProfiles is not None:
+        # Treat sportProfiles as the complete desired set: upsert each, drop the
+        # ones the user removed — but never remove the primary sport's profile.
+        new_primary = data.primarySport or user.primary_sport
+        desired = {sp.sport: sp for sp in data.sportProfiles}
+        existing = {p.sport: p for p in list(user.sport_profiles)}
+        for sport, sp in desired.items():
+            court_id = None
+            if sp.homeCourt:
+                court = Court.query.filter_by(slug=sp.homeCourt).first()
+                court_id = court.id if court else None
+            prof = existing.get(sport)
+            if prof:
+                prof.ntrp = sp.ntrp
+                if sp.availabilitySummary is not None:
+                    prof.availability_summary = sp.availabilitySummary
+                if sp.homeCourt is not None:
+                    prof.home_court_id = court_id
+            else:
+                user.sport_profiles.append(SportProfile(
+                    sport=sport, ntrp=sp.ntrp,
+                    availability_summary=sp.availabilitySummary, home_court_id=court_id,
+                ))
+        for sport, prof in existing.items():
+            if sport not in desired and sport != new_primary:
+                user.sport_profiles.remove(prof)
     db.session.commit()
     return jsonify({"user": user.to_dict(with_email=True)})
 

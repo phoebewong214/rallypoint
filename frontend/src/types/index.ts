@@ -65,6 +65,7 @@ export interface Player {
   availability?: string;
   matchScore?: number;
   reason?: string;
+  saved?: boolean;
 }
 
 export type SessionStatus = "confirmed" | "pending" | "requested" | "completed";

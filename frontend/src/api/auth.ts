@@ -25,6 +25,7 @@ export interface UpdateProfileBody {
   bio?: string;
   location?: string;
   primarySport?: "Tennis" | "Pickleball";
+  sportProfiles?: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt?: string; availabilitySummary?: string }[];
 }
 
 export const authApi = {
