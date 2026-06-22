@@ -114,6 +114,19 @@ def test_session_payload_exposes_opponent_id(client):
     assert ha["oppId"] == b_id
 
 
+def test_session_payload_includes_opponent_rating(client):
+    """to_dict exposes oppNtrp = the opponent's rating for THAT session's sport,
+    so the calendar block can show their level (no scores — just skill)."""
+    rh = client.post("/api/auth/signup", json={
+        "email": "rate_h@rally.app", "password": "rally1234", "name": "Host", "sport": "Tennis", "ntrp": "3.0"})
+    a = {"Authorization": f"Bearer {rh.get_json()['token']}"}
+    rg = client.post("/api/auth/signup", json={
+        "email": "rate_g@rally.app", "password": "rally1234", "name": "Guest", "sport": "Tennis", "ntrp": "4.0"})
+    b_id = rg.get_json()["user"]["id"]
+    _request(client, a, b_id)  # Tennis session
+    assert _list(client, a)[0]["oppNtrp"] == "4.0"
+
+
 def test_cancel_requires_being_a_participant(client):
     a_id, a = _signup(client, "h5@rally.app")
     b_id, b = _signup(client, "g5@rally.app")

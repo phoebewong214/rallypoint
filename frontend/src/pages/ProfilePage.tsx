@@ -574,10 +574,20 @@ function ProfilePage() {
                 return (
                   <Link key={key} to="/sessions" className={"sched-block " + s.sport.toLowerCase() + (s.next ? " next" : "")} style={{ gridColumn: col + 2, gridRow: row + 2 }}>
                     <div className="sched-block-top">
-                      <div className="sched-block-title">{s.opp ? `with ${s.opp}` : "Game"}{extra > 0 ? ` +${extra}` : ""}</div>
-                      <div className="sched-block-meta">{s.court ?? "—"}</div>
+                      <div className="sched-block-sport">
+                        <span className="sb-dot" />{s.sport}
+                        {s.oppNtrp && <span className="sb-lvl">{ratingLabel(s.sport)} {s.oppNtrp}</span>}
+                      </div>
+                      <div className="sched-block-title">{s.opp ? `with ${s.opp}` : "Open game"}{extra > 0 ? ` +${extra} more` : ""}</div>
                     </div>
-                    <div className="sched-block-time">{s.time}</div>
+                    <div className="sched-block-foot">
+                      {s.court ? (
+                        <span className="sched-block-meta"><Icon name="pin" size={9} /><span className="sb-court">{s.court}</span></span>
+                      ) : (
+                        <span className="sched-block-meta sb-nocourt">No court set</span>
+                      )}
+                      <span className="sched-block-time">{s.time}</span>
+                    </div>
                   </Link>
                 );
               })}
