@@ -18,3 +18,6 @@ class AvailabilitySlot(db.Model):
     status = db.Column(db.Integer, nullable=False, default=0)  # 0=unavail, 1=maybe, 2=available
 
     user = db.relationship("User", back_populates="availability")
+
+    def to_dict(self) -> dict:
+        return {"dayOfWeek": self.day_of_week, "timeBand": self.time_band, "status": self.status}

@@ -63,3 +63,19 @@ def test_save_unsave_player(client):
 def test_cannot_save_self(client):
     tok, uid = _signup(client, "self@rally.app")
     assert client.post(f"/api/players/{uid}/save", headers=_h(tok)).status_code == 400
+
+
+def test_set_and_replace_availability(client):
+    tok, _ = _signup(client, "avail@rally.app")
+    h = _h(tok)
+    r = client.patch("/api/auth/me", headers=h, json={"availability": [
+        {"dayOfWeek": 5, "timeBand": "MORN", "status": 2},
+        {"dayOfWeek": 2, "timeBand": "EVE", "status": 1},
+        {"dayOfWeek": 0, "timeBand": "AFT", "status": 0},  # 0 → not stored
+    ]})
+    assert r.status_code == 200, r.get_json()
+    cells = {(a["dayOfWeek"], a["timeBand"]): a["status"] for a in r.get_json()["user"]["availability"]}
+    assert cells == {(5, "MORN"): 2, (2, "EVE"): 1}
+    # replace semantics: sending an empty grid clears it
+    r2 = client.patch("/api/auth/me", headers=h, json={"availability": []})
+    assert r2.get_json()["user"]["availability"] == []
