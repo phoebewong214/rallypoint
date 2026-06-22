@@ -1,54 +1,48 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useSessions } from "../hooks/useSessions";
+import { useCourts } from "../hooks/useCourts";
+import { useSavedPlayers, useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { Spinner } from "../components/Skeleton";
+import type { Sport } from "../types";
 
-/* Bio + stats stay as placeholders until /api/users/me is wired up. */
-const PROFILE_EXTRAS = {
-  bio: "Capstone student picking up pickleball this semester. Looking for steady weekend partners around Berkeley — I play three times a week and I'm working on my third shot drop and dinking consistency. Tennis background (NTRP 3.0 backhand still in progress).",
-  stats: { played: 27, wins: 18, losses: 9, winRate: 67, streak: 4 },
-};
+const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 
-const RECENT_MATCHES = [
-  { id: 1, opp: "Maya Patel",       sport: "Pickleball", court: "Oak Park Courts",   score: "11–7, 11–9",      date: "2 days ago",   result: "W" },
-  { id: 2, opp: "Jordan Williams",  sport: "Tennis",     court: "UC Berkeley · #4",  score: "6–3, 4–6, 7–5",   date: "4 days ago",   result: "W" },
-  { id: 3, opp: "Marcus Chen",      sport: "Tennis",     court: "Strawberry Canyon", score: "3–6, 2–6",        date: "Last week",    result: "L" },
-  { id: 4, opp: "Aisha Johnson",    sport: "Pickleball", court: "Cesar Chavez Park", score: "11–4, 11–8",      date: "Last week",    result: "W" },
-  { id: 5, opp: "Sofía Rodríguez",  sport: "Pickleball", court: "Oak Park Courts",   score: "9–11, 7–11",      date: "2 weeks ago",  result: "L" },
-];
-
-const AVAILABILITY = [
-  { label: "MORN",  row: [0, 0, 0, 0, 0, 2, 2] },
-  { label: "AFT",   row: [0, 0, 1, 0, 1, 1, 1] },
-  { label: "EVE",   row: [0, 2, 0, 2, 0, 1, 0] },
-];
-const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
-
-const ACHIEVEMENTS = [
-  { icon: "flame",    name: "5-game streak",  unlocked: true },
-  { icon: "trophy",   name: "First Win",      unlocked: true },
-  { icon: "bolt",     name: "Level Up: 3.5",  unlocked: true },
-  { icon: "users",    name: "10 Partners",    unlocked: true },
-  { icon: "calendar", name: "Daily Player",   unlocked: false },
-  { icon: "stats",    name: "100 Matches",    unlocked: false },
-];
+interface EditForm {
+  name: string;
+  bio: string;
+  location: string;
+  primarySport: "Tennis" | "Pickleball";
+  primaryNtrp: string;
+  alsoPlay: boolean;
+  secondaryNtrp: string;
+}
 
 interface EditModalProps {
-  initial: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" };
+  initial: EditForm;
   onClose: () => void;
-  onSave: (patch: EditModalProps["initial"]) => Promise<void>;
+  onSave: (patch: {
+    name: string; bio: string; location: string;
+    primarySport: "Tennis" | "Pickleball";
+    sportProfiles: { sport: "Tennis" | "Pickleball"; ntrp: string }[];
+  }) => Promise<void>;
 }
 
 function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
-  const set = (k: keyof typeof form) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
+  const set = (k: keyof EditForm) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
+  const otherSport: "Tennis" | "Pickleball" = form.primarySport === "Tennis" ? "Pickleball" : "Tennis";
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(form);
+      const sportProfiles = [{ sport: form.primarySport, ntrp: form.primaryNtrp }];
+      if (form.alsoPlay) sportProfiles.push({ sport: otherSport, ntrp: form.secondaryNtrp });
+      await onSave({ name: form.name, bio: form.bio, location: form.location, primarySport: form.primarySport, sportProfiles });
     } finally {
       setSaving(false);
     }
@@ -59,9 +53,7 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2 className="modal-title">Edit profile</h2>
-          <button className="modal-close" type="button" onClick={onClose} aria-label="Close">
-            <Icon name="x" size={14} />
-          </button>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
         </div>
         <div className="modal-body">
           <div className="field">
@@ -70,36 +62,44 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
           </div>
           <div className="field">
             <label className="field-label"><Icon name="pin" size={13} /> Location</label>
-            <input className="input" value={form.location} onChange={set("location")} placeholder="Berkeley, CA" />
+            <input className="input" value={form.location} onChange={set("location")} placeholder="Chicago, IL" />
           </div>
           <div className="field">
             <label className="field-label"><Icon name="trophy" size={13} /> Primary Sport</label>
-            <div className="pill-group" role="tablist">
-              <button
-                type="button"
-                className={"pill" + (form.primarySport === "Pickleball" ? " active" : "")}
-                onClick={() => set("primarySport")("Pickleball")}
-              >
-                Pickleball
-              </button>
-              <button
-                type="button"
-                className={"pill" + (form.primarySport === "Tennis" ? " active" : "")}
-                onClick={() => set("primarySport")("Tennis")}
-              >
-                Tennis
-              </button>
+            <div className="pill-group" role="radiogroup">
+              <button type="button" className={"pill" + (form.primarySport === "Pickleball" ? " active" : "")} onClick={() => set("primarySport")("Pickleball")}>Pickleball</button>
+              <button type="button" className={"pill" + (form.primarySport === "Tennis" ? " active" : "")} onClick={() => set("primarySport")("Tennis")}>Tennis</button>
             </div>
           </div>
           <div className="field">
+            <label className="field-label"><Icon name="bolt" size={13} /> {ratingLabel(form.primarySport)} ({form.primarySport})</label>
+            <div className="select">
+              <select value={form.primaryNtrp} onChange={set("primaryNtrp")}>
+                {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <span className="select-caret"><Icon name="chevron" size={16} /></span>
+            </div>
+          </div>
+          <div className="field">
+            <label className="checkbox-row">
+              <input type="checkbox" checked={form.alsoPlay} onChange={(e) => set("alsoPlay")(e.target.checked)} />
+              <span>I also play {otherSport}</span>
+            </label>
+          </div>
+          {form.alsoPlay && (
+            <div className="field">
+              <label className="field-label"><Icon name="sparkles" size={13} /> {ratingLabel(otherSport)} ({otherSport})</label>
+              <div className="select">
+                <select value={form.secondaryNtrp} onChange={set("secondaryNtrp")}>
+                  {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <span className="select-caret"><Icon name="chevron" size={16} /></span>
+              </div>
+            </div>
+          )}
+          <div className="field">
             <label className="field-label"><Icon name="edit" size={13} /> Bio</label>
-            <textarea
-              className="textarea"
-              value={form.bio}
-              onChange={set("bio")}
-              placeholder="Tell other players a bit about your game…"
-              maxLength={1000}
-            />
+            <textarea className="textarea" value={form.bio} onChange={set("bio")} placeholder="Tell other players a bit about your game…" maxLength={1000} />
           </div>
         </div>
         <div className="modal-foot">
@@ -116,29 +116,34 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
 function ProfilePage() {
   const { user: authUser, updateProfile } = useAuth();
   const { show } = useToast();
-  // eslint-disable-next-line no-unused-vars
-  const [tab, setTab] = useState("matches");
   const [editOpen, setEditOpen] = useState(false);
-  const [localBio, setLocalBio] = useState<string | null>(null);
 
-  /* Merge live auth user with placeholder bio/stats. */
-  const USER = {
-    name: authUser?.name ?? "Player",
-    initials: authUser?.initials ?? "P",
-    handle: authUser?.handle ?? "@player",
-    ntrp: authUser?.ntrp ?? "3.5",
-    primarySport: authUser?.primarySport ?? "Pickleball",
-    secondarySport: authUser?.secondarySport ?? "Tennis",
-    location: authUser?.location ?? "Berkeley, CA",
-    joined: authUser?.joined ?? "Jan 2025",
-    ...PROFILE_EXTRAS,
-    bio: localBio ?? (authUser as any)?.bio ?? PROFILE_EXTRAS.bio,
-  };
+  const sportProfiles = authUser?.sportProfiles ?? [];
+  const primarySport = (authUser?.primarySport as Sport | undefined) ?? sportProfiles[0]?.sport;
+  const primaryProfile = sportProfiles.find((p) => p.sport === primarySport) ?? sportProfiles[0];
+  const otherProfiles = sportProfiles.filter((p) => p.sport !== primaryProfile?.sport);
 
-  const handleSave = async (patch: { name: string; bio: string; location: string; primarySport: "Tennis" | "Pickleball" }) => {
+  // Collaboration record — derived from real sessions, never any score.
+  const { data: sessionsData } = useSessions();
+  const sessions = sessionsData?.sessions ?? [];
+  const statsReady = !!sessionsData;
+  const gamesPlayed = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").length;
+  const partners = new Set(sessions.filter((s) => s.status !== "cancelled").map((s: any) => s.oppId).filter(Boolean)).size;
+  const upcoming = sessions.filter((s) => s.bucket === "upcoming").length;
+  const recentGames = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").slice(0, 6);
+
+  // Favorite courts — real, from CourtFavorite.
+  const { data: courtsData } = useCourts({});
+  const favCourts = (courtsData?.courts ?? []).filter((c) => c.fav);
+
+  // Saved players — real, from the backend.
+  const { data: savedData } = useSavedPlayers();
+  const savedPlayers = savedData?.players ?? [];
+  const toggleSaved = useToggleSavedPlayer();
+
+  const handleSave = async (patch: Parameters<EditModalProps["onSave"]>[0]) => {
     try {
       await updateProfile(patch);
-      setLocalBio(patch.bio);
       setEditOpen(false);
       show("Profile updated", "success");
     } catch (err: any) {
@@ -147,87 +152,76 @@ function ProfilePage() {
   };
 
   const handleShare = async () => {
-    const url = window.location.origin + "/profile";
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(window.location.origin + "/profile");
       show("Profile link copied to clipboard", "success");
     } catch {
       show("Couldn't copy link", "error");
     }
   };
 
+  const stat = (v: number) => (statsReady ? v : "—");
+
   return (
     <>
       <TopNav />
-
       <main className="page">
         {/* Hero */}
         <section className="profile-hero">
           <div className="cover" />
           <div className="hero-body">
             <div className="hero-avatar-wrap">
-              <div className="hero-avatar">
-                {USER.initials}
-                <span className="online" />
+              <div className="hero-avatar"
+                style={authUser?.avatarColor ? { background: authUser.avatarColor, color: authUser.avatarFg || "#fff" } : undefined}>
+                {authUser?.initials ?? "P"}
               </div>
             </div>
 
             <div className="hero-info">
-              <h1 className="hero-name">{USER.name}</h1>
+              <h1 className="hero-name">{authUser?.name ?? "Player"}</h1>
               <div className="hero-meta">
-                <span>{USER.handle}</span>
-                <span className="dot" />
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="pin" size={13} /> {USER.location}
-                </span>
-                <span className="dot" />
-                <span>Joined {USER.joined}</span>
+                <span>{authUser?.handle ?? "@player"}</span>
+                {authUser?.location && (<><span className="dot" /><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="pin" size={13} /> {authUser.location}</span></>)}
+                {authUser?.joined && (<><span className="dot" /><span>Joined {authUser.joined}</span></>)}
               </div>
               <div className="hero-badges">
-                <span className="badge skill">{ratingLabel(USER.primarySport)} {USER.ntrp}</span>
-                <span className="badge">{USER.primarySport}</span>
-                <span className="badge sport">{USER.secondarySport}</span>
-                <span className="badge blue"><Icon name="flame" size={11} /> {USER.stats.streak}-win streak</span>
+                {primaryProfile ? (
+                  <>
+                    <span className="badge skill">{ratingLabel(primaryProfile.sport)} {primaryProfile.ntrp}</span>
+                    <span className="badge">{primaryProfile.sport}</span>
+                  </>
+                ) : primarySport ? (
+                  <span className="badge">{primarySport}</span>
+                ) : null}
+                {otherProfiles.map((p) => (
+                  <span key={p.sport} className="badge sport">{p.sport} · {ratingLabel(p.sport)} {p.ntrp}</span>
+                ))}
               </div>
             </div>
 
             <div className="hero-actions">
-              <button className="btn-ghost" type="button" onClick={handleShare}>
-                <Icon name="share" size={15} /> Share
-              </button>
-              <button className="btn-primary" type="button" onClick={() => setEditOpen(true)}>
-                <Icon name="edit" size={15} stroke={2.4} /> Edit Profile
-              </button>
+              <button className="btn-ghost" type="button" onClick={handleShare}><Icon name="share" size={15} /> Share</button>
+              <button className="btn-primary" type="button" onClick={() => setEditOpen(true)}><Icon name="edit" size={15} stroke={2.4} /> Edit Profile</button>
             </div>
           </div>
         </section>
 
-        {/* Stats */}
+        {/* Collaboration record (no scores — RallyPoint only makes the intro) */}
         <section className="stats-row">
-          <div className="stat-card">
-            <span className="label">Matches Played</span>
-            <span className="value">{USER.stats.played}</span>
-            <span className="sub">All time</span>
-          </div>
-          <div className="stat-card">
-            <span className="label">Wins</span>
-            <span className="value">{USER.stats.wins}</span>
-            <span className="sub">+3 this month</span>
-          </div>
-          <div className="stat-card">
-            <span className="label">Losses</span>
-            <span className="value">{USER.stats.losses}</span>
-            <span className="sub">+1 this month</span>
-          </div>
           <div className="stat-card accent">
-            <span className="label">Win Rate</span>
-            <span className="value">{USER.stats.winRate}%</span>
-            <span className="sub">▲ 4% vs last mo.</span>
+            <span className="label">Games Played</span>
+            <span className="value">{stat(gamesPlayed)}</span>
+            <span className="sub">arranged via RallyPoint</span>
           </div>
           <div className="stat-card">
-            <span className="label">Current Streak</span>
-            <span className="value">{USER.stats.streak}W</span>
-            <span className="sub">Personal best: 6</span>
+            <span className="label">Partners</span>
+            <span className="value">{stat(partners)}</span>
+            <span className="sub">people you've played</span>
+          </div>
+          <div className="stat-card">
+            <span className="label">Upcoming</span>
+            <span className="value">{stat(upcoming)}</span>
+            <span className="sub">games on the calendar</span>
           </div>
         </section>
 
@@ -237,47 +231,37 @@ function ProfilePage() {
             {/* About */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title">
-                  <span className="ico"><Icon name="user" size={15} /></span>
-                  About
-                </h2>
-                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}>
-                  <Icon name="edit" size={13} /> Edit
-                </button>
+                <h2 className="panel-title"><span className="ico"><Icon name="user" size={15} /></span> About</h2>
+                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}><Icon name="edit" size={13} /> Edit</button>
               </div>
-              <p className="bio">{USER.bio}</p>
+              {authUser?.bio
+                ? <p className="bio">{authUser.bio}</p>
+                : <p className="bio" style={{ color: "var(--text-dim)" }}>No bio yet — tap Edit to tell other players about your game.</p>}
             </div>
 
-            {/* Recent matches */}
+            {/* Recent games (no scores) */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title">
-                  <span className="ico green"><Icon name="trophy" size={15} /></span>
-                  Recent Matches
-                </h2>
-                <button
-                  className="panel-action"
-                  type="button"
-                  onClick={() => { window.location.href = "/sessions"; }}
-                >
-                  View all <Icon name="chevron-r" size={13} />
-                </button>
+                <h2 className="panel-title"><span className="ico green"><Icon name="calendar" size={15} /></span> Recent games</h2>
+                <Link className="panel-action" to="/sessions">View all <Icon name="chevron-r" size={13} /></Link>
               </div>
-              <div className="match-list">
-                {RECENT_MATCHES.map((m) => (
-                  <div key={m.id} className="match-row">
-                    <div className={"result-badge " + (m.result === "W" ? "w" : "l")}>
-                      {m.result}
+              {recentGames.length === 0 ? (
+                <div className="empty" style={{ padding: "28px 20px" }}>
+                  <p className="empty-sub" style={{ margin: 0 }}>No games yet. <Link to="/find" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find a partner →</Link></p>
+                </div>
+              ) : (
+                <div className="recent-list">
+                  {recentGames.map((m: any) => (
+                    <div key={m.id} className="recent-game">
+                      <div style={{ minWidth: 0 }}>
+                        <p className="rg-opp">{m.opp ? `with ${m.opp}` : "Game"}</p>
+                        <span className="rg-meta">{m.sport}{m.court ? ` · ${m.court}` : ""}</span>
+                      </div>
+                      <div className="rg-date">{m.weekday}, {m.month} {m.day}</div>
                     </div>
-                    <div className="match-main">
-                      <p className="match-opp">vs {m.opp}</p>
-                      <span className="match-meta">{m.sport} · {m.court}</span>
-                    </div>
-                    <div className="match-score">{m.score}</div>
-                    <div className="match-date">{m.date}</div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -286,113 +270,78 @@ function ProfilePage() {
             {/* Preferences */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title">
-                  <span className="ico blue"><Icon name="settings" size={15} /></span>
-                  Preferences
-                </h2>
+                <h2 className="panel-title"><span className="ico blue"><Icon name="settings" size={15} /></span> Preferences</h2>
+                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}><Icon name="edit" size={13} /> Edit</button>
               </div>
               <div className="info-list">
                 <div className="info-row">
                   <span className="ico green"><Icon name="trophy" size={16} /></span>
-                  <div>
-                    <div className="label">Primary Sport</div>
-                    <div className="value">{USER.primarySport}</div>
-                  </div>
+                  <div><div className="label">Primary Sport</div><div className="value">{primaryProfile?.sport ?? primarySport ?? "—"}</div></div>
                 </div>
-                <div className="info-row">
-                  <span className="ico"><Icon name="sparkles" size={16} /></span>
-                  <div>
-                    <div className="label">Also plays</div>
-                    <div className="value">{USER.secondarySport}</div>
+                {primaryProfile && (
+                  <div className="info-row">
+                    <span className="ico green"><Icon name="bolt" size={16} /></span>
+                    <div><div className="label">Skill Level</div><div className="value value-mono">{ratingLabel(primaryProfile.sport)} {primaryProfile.ntrp}</div></div>
                   </div>
-                </div>
-                <div className="info-row">
-                  <span className="ico green"><Icon name="bolt" size={16} /></span>
-                  <div>
-                    <div className="label">Skill Level</div>
-                    <div className="value value-mono">{ratingLabel(USER.primarySport)} {USER.ntrp}</div>
+                )}
+                {otherProfiles.map((p) => (
+                  <div className="info-row" key={p.sport}>
+                    <span className="ico"><Icon name="sparkles" size={16} /></span>
+                    <div><div className="label">Also plays</div><div className="value">{p.sport} · {ratingLabel(p.sport)} {p.ntrp}</div></div>
                   </div>
-                </div>
-                <div className="info-row">
-                  <span className="ico blue"><Icon name="pin" size={16} /></span>
-                  <div>
-                    <div className="label">Home Court</div>
-                    <div className="value">Oak Park Courts</div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Availability */}
+            {/* Saved players */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title">
-                  <span className="ico green"><Icon name="calendar" size={15} /></span>
-                  Availability
-                </h2>
-                <button className="panel-action" type="button" onClick={() => setEditOpen(true)}>
-                  <Icon name="edit" size={13} /> Edit
-                </button>
+                <h2 className="panel-title"><span className="ico green"><Icon name="users" size={15} /></span> Saved players</h2>
+                <Link className="panel-action" to="/find">Find <Icon name="chevron-r" size={13} /></Link>
               </div>
-
-              <div className="avail-wrap">
-                <div className="avail-label-col" />
-                <div className="avail-grid">
-                  {DAYS.map((d, i) => (
-                    <div key={i} className="avail-cell day-label">{d}</div>
+              {savedPlayers.length === 0 ? (
+                <p className="empty-sub" style={{ margin: "4px 0 0" }}>No saved players yet. Tap the bookmark on a partner in <Link to="/find" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find a partner →</Link></p>
+              ) : (
+                <div className="saved-player-list">
+                  {savedPlayers.map((p) => (
+                    <div key={p.id} className="saved-player">
+                      <span className="avatar-chip" style={{ background: p.color || "var(--bg-3)" }}>{p.initials}</span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="sp-name">{p.name}</div>
+                        <div className="sp-meta">{p.sports.join(" · ") || p.primarySport}</div>
+                      </div>
+                      <button
+                        className="btn-sm icon-only"
+                        type="button"
+                        aria-label={`Remove ${p.name} from saved`}
+                        onClick={() => toggleSaved.mutate({ id: p.id, saved: false })}
+                      >
+                        <Icon name="x" size={14} />
+                      </button>
+                    </div>
                   ))}
                 </div>
-
-                {AVAILABILITY.map((band) => (
-                  <React.Fragment key={band.label}>
-                    <div className="avail-label-col">{band.label}</div>
-                    <div className="avail-grid">
-                      {band.row.map((v, i) => (
-                        <div
-                          key={i}
-                          className={"avail-cell " + (v === 2 ? "on" : v === 1 ? "half" : "")}
-                          title={v === 2 ? "Available" : v === 1 ? "Maybe" : "Unavailable"}
-                        />
-                      ))}
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
-
-              <div style={{
-                display: "flex", gap: 14, marginTop: 14,
-                fontSize: 11, color: "var(--text-low)", fontWeight: 600
-              }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 10, height: 10, background: "var(--green)", borderRadius: 3 }} /> Available
-                </span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 10, height: 10, background: "var(--green-soft)", border: "1px solid var(--green)", borderRadius: 3 }} /> Maybe
-                </span>
-              </div>
+              )}
             </div>
 
-            {/* Achievements */}
+            {/* Favorite courts */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title">
-                  <span className="ico green"><Icon name="flame" size={15} /></span>
-                  Achievements
-                </h2>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--text-low)", fontWeight: 600 }}>
-                  4 / 6
-                </span>
+                <h2 className="panel-title"><span className="ico blue"><Icon name="bookmark" size={15} /></span> Favorite courts</h2>
+                <Link className="panel-action" to="/courts">Browse <Icon name="chevron-r" size={13} /></Link>
               </div>
-              <div className="ach-grid">
-                {ACHIEVEMENTS.map((a, i) => (
-                  <div key={i} className={"ach" + (a.unlocked ? "" : " locked")}>
-                    <span className={"ico-circ" + (a.unlocked ? "" : " locked")}>
-                      <Icon name={a.icon} size={16} stroke={2.4} />
-                    </span>
-                    <span className="name">{a.name}</span>
-                  </div>
-                ))}
-              </div>
+              {favCourts.length === 0 ? (
+                <p className="empty-sub" style={{ margin: "4px 0 0" }}>No saved courts yet. <Link to="/courts" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find courts →</Link></p>
+              ) : (
+                <div className="fav-court-list">
+                  {favCourts.map((c) => (
+                    <Link key={c.id} to={`/courts/${encodeURIComponent(c.id)}`} className="fav-court">
+                      <span className="fav-court-name">{c.name}</span>
+                      <span className="fav-court-meta">{c.distance != null ? `${c.distance} mi` : c.sports.join(" · ")}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </aside>
         </section>
@@ -401,10 +350,13 @@ function ProfilePage() {
       {editOpen && (
         <EditProfileModal
           initial={{
-            name: USER.name,
-            bio: USER.bio,
-            location: USER.location,
-            primarySport: USER.primarySport as "Tennis" | "Pickleball",
+            name: authUser?.name ?? "",
+            bio: authUser?.bio ?? "",
+            location: authUser?.location ?? "",
+            primarySport: (primarySport as "Tennis" | "Pickleball") ?? "Pickleball",
+            primaryNtrp: primaryProfile?.ntrp ?? "3.5",
+            alsoPlay: otherProfiles.length > 0,
+            secondaryNtrp: otherProfiles[0]?.ntrp ?? "3.5",
           }}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}
