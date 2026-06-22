@@ -2022,6 +2022,42 @@ textarea:focus-visible,
 .avail-cell.editable { cursor: pointer; }
 .avail-cell.editable:hover { border-color: var(--green-deep); }
 
+/* Compact read-only preferred-times grid on a Find Partner player card. */
+.pref-mini { margin-top: 4px; }
+.pref-mini-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-low);
+  margin-bottom: 6px;
+}
+.pref-mini-grid {
+  display: grid;
+  grid-template-columns: 12px repeat(7, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+.pref-mini-dow, .pref-mini-band {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-low);
+  text-align: center;
+}
+.pref-mini-band { text-align: left; }
+.pref-mini-cell {
+  height: 12px;
+  border-radius: 3px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+.pref-mini-cell.on { background: var(--green); border-color: var(--green-deep); }
+.pref-mini-cell.half { background: var(--green-soft); border-color: var(--green); }
+
 /* Profile games timetable section labels + upcoming accent */
 .agenda-label {
   font-size: 11px;

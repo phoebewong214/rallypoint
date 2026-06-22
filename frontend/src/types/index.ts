@@ -63,6 +63,7 @@ export interface Player {
   sport?: Sport;
   ntrp?: string;
   availability?: string;
+  availabilitySlots?: AvailabilitySlotDTO[];
   matchScore?: number;
   reason?: string;
   saved?: boolean;

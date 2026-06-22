@@ -11,6 +11,7 @@ export interface PlayerFilters {
   ntrpMin?: number;
   ntrpMax?: number;
   courts?: string[]; // court slugs — only players whose home court is one of these
+  timeBands?: string[]; // MORN/AFT/EVE — players available in any of these bands
 }
 
 function toQS(filters: PlayerFilters): string {
@@ -19,6 +20,7 @@ function toQS(filters: PlayerFilters): string {
   if (filters.ntrpMin !== undefined) params.push(`ntrpMin=${filters.ntrpMin}`);
   if (filters.ntrpMax !== undefined) params.push(`ntrpMax=${filters.ntrpMax}`);
   if (filters.courts && filters.courts.length) params.push(`courts=${filters.courts.map(encodeURIComponent).join(",")}`);
+  if (filters.timeBands && filters.timeBands.length) params.push(`timeBands=${filters.timeBands.join(",")}`);
   return params.length ? "?" + params.join("&") : "";
 }
 
