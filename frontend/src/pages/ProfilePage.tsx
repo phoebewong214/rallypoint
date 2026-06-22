@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
@@ -12,6 +12,31 @@ import type { Sport } from "../types";
 const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 const AVAIL_BANDS = ["MORN", "AFT", "EVE"];
 const AVAIL_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+
+// Schedule tab — weekly calendar grid (rows = eight 2-hour slots 6 AM–8 PM).
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const SCHED_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const TIME_SLOTS = ["6 AM", "8 AM", "10 AM", "12 PM", "2 PM", "4 PM", "6 PM", "8 PM"];
+
+/* Monday-based start-of-week, normalized to midnight. */
+function startOfWeek(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
+  return out;
+}
+function addDays(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+function sameDate(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+/* Snap an hour to the nearest of the eight 2-hour slots (6,8,…,20), clamped 0–7. */
+function hourToSlot(h: number): number {
+  return Math.max(0, Math.min(7, Math.round((h - 6) / 2)));
+}
 
 interface EditForm {
   name: string;
@@ -120,6 +145,13 @@ function ProfilePage() {
   const { show } = useToast();
   const [editOpen, setEditOpen] = useState(false);
 
+  // Tabs: ?tab=schedule deep-links to the week view; Overview is the default.
+  const [params, setParams] = useSearchParams();
+  const tab: "overview" | "schedule" = params.get("tab") === "schedule" ? "schedule" : "overview";
+  const setTab = (t: "overview" | "schedule") =>
+    setParams(t === "schedule" ? { tab: "schedule" } : {}, { replace: true });
+  const [weekOffset, setWeekOffset] = useState(0);
+
   const sportProfiles = authUser?.sportProfiles ?? [];
   const primarySport = (authUser?.primarySport as Sport | undefined) ?? sportProfiles[0]?.sport;
   const primaryProfile = sportProfiles.find((p) => p.sport === primarySport) ?? sportProfiles[0];
@@ -137,6 +169,43 @@ function ProfilePage() {
     .filter((s) => s.bucket === "upcoming" && s.status !== "cancelled")
     .slice().reverse().slice(0, 6);
   const recentGames = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").slice(0, 6);
+
+  // Schedule tab — a real weekly calendar grid, placed by each session's scheduledAt.
+  const weekStart = useMemo(() => addDays(startOfWeek(new Date()), weekOffset * 7), [weekOffset]);
+  const weekEnd = addDays(weekStart, 6);
+  const weekDays = useMemo(
+    () => SCHED_DAYS.map((label, i) => {
+      const d = addDays(weekStart, i);
+      return { label, date: d.getDate(), isToday: weekOffset === 0 && sameDate(d, new Date()) };
+    }),
+    [weekStart, weekOffset],
+  );
+  const weekRange = weekStart.getMonth() === weekEnd.getMonth()
+    ? `${MONTHS[weekStart.getMonth()]} ${weekStart.getDate()}–${weekEnd.getDate()}`
+    : `${MONTHS[weekStart.getMonth()]} ${weekStart.getDate()} – ${MONTHS[weekEnd.getMonth()]} ${weekEnd.getDate()}`;
+  // Bucket non-cancelled, scheduled sessions into {col,row} cells for the visible week.
+  const weekBlocks = useMemo(() => {
+    const cells: Record<string, any[]> = {};
+    const end = addDays(weekStart, 7);
+    sessions.forEach((s: any) => {
+      if (!s.scheduledAt || s.status === "cancelled") return;
+      const d = new Date(s.scheduledAt);
+      if (d < weekStart || d >= end) return;
+      const col = (d.getDay() + 6) % 7; // 0=Mon … 6=Sun
+      const row = hourToSlot(d.getHours());
+      (cells[`${col}-${row}`] ??= []).push(s);
+    });
+    return cells;
+  }, [sessions, weekStart]);
+  const weekBlockCount = Object.values(weekBlocks).reduce((n, a) => n + a.length, 0);
+  // Pending/requested games have no time yet — surface them so they aren't lost.
+  const unscheduledCount = sessions.filter((s: any) => !s.scheduledAt && s.status !== "cancelled").length;
+  // Tab badge: games scheduled in the real current week.
+  const thisWeekCount = useMemo(() => {
+    const ws = startOfWeek(new Date());
+    const we = addDays(ws, 7);
+    return sessions.filter((s: any) => s.scheduledAt && s.status !== "cancelled" && new Date(s.scheduledAt) >= ws && new Date(s.scheduledAt) < we).length;
+  }, [sessions]);
 
   // Preferred times — real, editable weekly grid (AvailabilitySlot).
   const availMap = useMemo(() => {
@@ -240,6 +309,21 @@ function ProfilePage() {
           </div>
         </section>
 
+        {/* Tabs: Overview (profile) · Schedule (real weekly calendar) */}
+        <div className="tab-bar" role="tablist" aria-label="Profile view">
+          <button type="button" role="tab" id="overview-tab" aria-selected={tab === "overview"} aria-controls="overview-panel"
+            className={"tab" + (tab === "overview" ? " active" : "")} onClick={() => setTab("overview")}>
+            <Icon name="user" size={15} /> Overview
+          </button>
+          <button type="button" role="tab" id="schedule-tab" aria-selected={tab === "schedule"} aria-controls="schedule-panel"
+            className={"tab" + (tab === "schedule" ? " active" : "")} onClick={() => setTab("schedule")}>
+            <Icon name="calendar" size={15} /> Schedule
+            {thisWeekCount > 0 && <span className="tab-count">{thisWeekCount}</span>}
+          </button>
+        </div>
+
+        {tab === "overview" && (
+        <div role="tabpanel" id="overview-panel" aria-labelledby="overview-tab">
         {/* Collaboration record (no scores — RallyPoint only makes the intro) */}
         <section className="stats-row">
           <div className="stat-card accent">
@@ -449,6 +533,77 @@ function ProfilePage() {
             </div>
           </aside>
         </section>
+        </div>
+        )}
+
+        {tab === "schedule" && (
+          <div className="panel" id="schedule-panel" role="tabpanel" aria-labelledby="schedule-tab">
+            <div className="panel-head">
+              <h2 className="panel-title"><span className="ico green"><Icon name="calendar" size={15} /></span> Week of {weekRange}</h2>
+              <div className="week-nav-controls">
+                <button className="week-nav-btn" type="button" title="Previous week" aria-label="Previous week" onClick={() => setWeekOffset((w) => w - 1)}>
+                  <Icon name="chevron-r" size={14} style={{ transform: "rotate(180deg)" }} />
+                </button>
+                <button className="btn-sm ghost" type="button" onClick={() => setWeekOffset(0)} disabled={weekOffset === 0} style={{ opacity: weekOffset === 0 ? 0.5 : 1 }}>Today</button>
+                <button className="week-nav-btn" type="button" title="Next week" aria-label="Next week" onClick={() => setWeekOffset((w) => w + 1)}>
+                  <Icon name="chevron-r" size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="sched-grid">
+              <div className="sched-corner" style={{ gridColumn: 1, gridRow: 1 }} />
+              {weekDays.map((d, ci) => (
+                <div key={ci} className={"sched-day-head" + (d.isToday ? " today" : "")} style={{ gridColumn: ci + 2, gridRow: 1 }}>
+                  <span className="day-name">{d.label}</span>
+                  <span className="day-num">{d.date}</span>
+                </div>
+              ))}
+              {TIME_SLOTS.map((slot, ri) => (
+                <React.Fragment key={ri}>
+                  <div className="sched-time" style={{ gridColumn: 1, gridRow: ri + 2 }}>{slot}</div>
+                  {weekDays.map((d, ci) => (
+                    <div key={ci} className={"sched-cell" + (d.isToday ? " today-col" : "")} style={{ gridColumn: ci + 2, gridRow: ri + 2 }} />
+                  ))}
+                </React.Fragment>
+              ))}
+              {Object.entries(weekBlocks).map(([key, arr]) => {
+                const [col, row] = key.split("-").map(Number);
+                const s: any = arr[0];
+                const extra = arr.length - 1;
+                return (
+                  <Link key={key} to="/sessions" className={"sched-block " + s.sport.toLowerCase() + (s.next ? " next" : "")} style={{ gridColumn: col + 2, gridRow: row + 2 }}>
+                    <div className="sched-block-top">
+                      <div className="sched-block-title">{s.opp ? `with ${s.opp}` : "Game"}{extra > 0 ? ` +${extra}` : ""}</div>
+                      <div className="sched-block-meta">{s.court ?? "—"}</div>
+                    </div>
+                    <div className="sched-block-time">{s.time}</div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {sessionsData && weekBlockCount === 0 && (
+              <p className="empty-sub" style={{ textAlign: "center", margin: "14px 0 2px" }}>
+                No games this week — <Link to="/find" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find a partner →</Link>
+              </p>
+            )}
+
+            <div className="sched-legend">
+              <span className="lgi"><span className="sw pickleball" /> Pickleball</span>
+              <span className="lgi"><span className="sw tennis" /> Tennis</span>
+              <Link to="/find" className="lgi" style={{ marginLeft: "auto", color: "var(--green-deep)", fontWeight: 600 }}>
+                <Icon name="plus" size={13} /> Find a partner
+              </Link>
+            </div>
+
+            {unscheduledCount > 0 && (
+              <p className="empty-sub" style={{ margin: "12px 0 0" }}>
+                {unscheduledCount} unscheduled {unscheduledCount === 1 ? "request" : "requests"} — <Link to="/sessions" style={{ color: "var(--green-deep)", fontWeight: 600 }}>review in My Games →</Link>
+              </p>
+            )}
+          </div>
+        )}
       </main>
 
       {editOpen && (
