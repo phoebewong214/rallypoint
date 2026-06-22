@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { IconName } from "../types";
 import type { ApiSession } from "../api/sessions";
@@ -175,6 +175,16 @@ function SessionsPage() {
      data — a real user with no games should see a true empty state. */
   const { data: apiData, isLoading, isError, refetch } = useSessions();
   const sessions: ApiSession[] = apiData?.sessions ?? [];
+
+  // On first load, open straight to Requests if any are waiting on a reply, so
+  // incoming invites aren't hidden behind the default Upcoming tab. After that
+  // the user's own tab choice wins.
+  const initialTabApplied = useRef(false);
+  useEffect(() => {
+    if (initialTabApplied.current || !apiData) return;
+    initialTabApplied.current = true;
+    if (sessions.some((s) => s.bucket === "requests")) setTab("requests");
+  }, [apiData, sessions]);
 
   const accept = useAcceptSession();
   const decline = useDeclineSession();

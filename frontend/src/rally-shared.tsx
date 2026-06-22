@@ -6,6 +6,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import type { IconName, NavId } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
+import { useSessions } from "./hooks/useSessions";
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke"> & {
   name: IconName;
@@ -154,6 +155,11 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
   const location = useLocation();
   const showUser = !hideUser && !!user;
 
+  // Incoming game requests waiting on a reply — surfaced as a badge on "My Games"
+  // so they're noticed from any page (shares the cached /sessions query).
+  const { data: sessionsData } = useSessions(!!user);
+  const requestCount = (sessionsData?.sessions ?? []).filter((s) => s.bucket === "requests").length;
+
   // Mobile hamburger menu — collapses nav links + user controls into a drawer.
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -186,6 +192,9 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
                 }
               >
                 {l.label}
+                {l.id === "matches" && requestCount > 0 && (
+                  <span className="nav-badge" aria-label={`${requestCount} pending request${requestCount === 1 ? "" : "s"}`}>{requestCount}</span>
+                )}
               </NavLink>
             ))}
           </div>
@@ -262,6 +271,9 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
                     }
                   >
                     {l.label}
+                    {l.id === "matches" && requestCount > 0 && (
+                      <span className="nav-badge" aria-label={`${requestCount} pending request${requestCount === 1 ? "" : "s"}`}>{requestCount}</span>
+                    )}
                   </NavLink>
                 ))}
               </div>
