@@ -11,7 +11,7 @@ export function useCourtDetail(slug: string | undefined) {
 }
 
 /* All mutations refresh the open court detail + the courts list (busy badges). */
-function useCourtMutation<TArgs>(fn: (a: TArgs) => Promise<unknown>, slug?: string) {
+function useCourtMutation<TArgs, TResult>(fn: (a: TArgs) => Promise<TResult>, slug?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,

@@ -2,14 +2,22 @@
    API client — fetch wrapper.
    - Auth rides in an httpOnly cookie (set by the backend), so we send
      credentials: "include" and never touch the JWT from JS.
+   - VITE_API_URL points to the deployed API in production; localhost is only
+     the Vite dev fallback.
    - For unsafe methods we echo the readable CSRF cookie in X-CSRF-Token
      (double-submit-cookie CSRF defense).
    - Parses JSON, throws ApiError on non-2xx.
    - On 401, fires a 'auth:expired' window event so AuthContext can logout.
    ============================================================ */
 
-const API_BASE: string =
-  (import.meta as any).env?.VITE_API_URL || "http://localhost:5050/api";
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  if (import.meta.env.DEV) return "http://localhost:5050/api";
+  throw new Error("Missing VITE_API_URL for production build.");
+}
+
+const API_BASE = resolveApiBase();
 
 const CSRF_COOKIE = "rp_csrf";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

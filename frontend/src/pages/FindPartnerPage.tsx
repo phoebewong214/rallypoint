@@ -487,6 +487,9 @@ const TIME_KEYWORDS: Record<string, string[]> = {
   Weekend: ["weekend", "saturday", "sunday", "sat", "sun"],
 };
 
+const DEMO_FALLBACK_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_DEMO_FALLBACK === "true";
+
 function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
@@ -562,6 +565,8 @@ function FindPartnerPage() {
   const {
     data: apiData,
     isLoading: apiLoading,
+    isError: apiError,
+    refetch: refetchPlayers,
   } = usePlayers({
     sport: applied.sport,
     ntrpMin: applied.ntrp[0],
@@ -573,7 +578,12 @@ function FindPartnerPage() {
   // (loading or unreachable). We must NOT treat an empty live result as "demo",
   // or real users with no matches would see fabricated players.
   const liveMatches = apiData ? apiData.players : null;
-  const dataSource: "live" | "demo" = liveMatches ? "live" : "demo";
+  const showDemoMatches = DEMO_FALLBACK_ENABLED && apiError && !liveMatches;
+  const dataSource: "live" | "demo" | "unavailable" = liveMatches
+    ? "live"
+    : showDemoMatches
+      ? "demo"
+      : "unavailable";
 
   const visiblePlayers = useMemo(() => {
     const activeKey = applied.sport === "Pickleball" ? "pickleball" : "tennis";
@@ -593,7 +603,7 @@ function FindPartnerPage() {
           altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
       });
-    } else {
+    } else if (showDemoMatches) {
       /* Demo branch — local seed data for when the backend is unreachable. */
       projected = PLAYERS
         .filter((p) => p[activeKey])
@@ -611,6 +621,8 @@ function FindPartnerPage() {
           const n = parseFloat(p.ntrp);
           return n >= applied.ntrp[0] && n <= applied.ntrp[1];
         });
+    } else {
+      projected = [];
     }
 
     /* Preferred-time filter — matched against each player's availability text. */
@@ -630,7 +642,7 @@ function FindPartnerPage() {
     else if (sort === "skill") projected.sort((a, b) => parseFloat(b.ntrp) - parseFloat(a.ntrp));
     else projected.sort((a, b) => b.matchScore - a.matchScore);
     return projected;
-  }, [liveMatches, applied.sport, applied.ntrp, applied.time, sort]);
+  }, [liveMatches, showDemoMatches, applied.sport, applied.ntrp, applied.time, sort]);
 
   const toggle = (set, setter) => (id) => {
     const next = new Set(set);
@@ -648,7 +660,7 @@ function FindPartnerPage() {
   const confirmRequest = (iso: string, note?: string) => {
     const target = requestTarget;
     if (!target) return;
-    if (dataSource === "demo") {
+    if (dataSource !== "live") {
       // No backend to talk to — local-only acknowledgement.
       toggle(requested, setRequested)(target.id);
       setRequestTarget(null);
@@ -691,6 +703,8 @@ function FindPartnerPage() {
                 ? "Finding your matches…"
                 : dataSource === "demo"
                   ? "Showing sample partners"
+                  : dataSource === "unavailable"
+                    ? "Unable to load partner matches"
                   : visiblePlayers.length === 0
                     ? "No partners match these filters yet"
                     : `${visiblePlayers.length} partner${visiblePlayers.length === 1 ? "" : "s"} matched on skill & schedule`}
@@ -782,6 +796,35 @@ function FindPartnerPage() {
         {apiLoading && !liveMatches ? (
           <div className="grid">
             {Array.from({ length: 6 }).map((_, i) => <PlayerCardSkeleton key={i} />)}
+          </div>
+        ) : dataSource === "unavailable" ? (
+          <div
+            role="status"
+            style={{ textAlign: "center", padding: "64px 24px", maxWidth: 460, margin: "0 auto" }}
+          >
+            <div
+              style={{
+                width: 56, height: 56, borderRadius: "50%", margin: "0 auto 18px",
+                display: "grid", placeItems: "center",
+                background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)",
+              }}
+            >
+              <Icon name="search" size={24} />
+            </div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>
+              Couldn't load partner matches
+            </h3>
+            <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.6, margin: "0 0 18px" }}>
+              Check that the API is reachable, then try loading matches again.
+            </p>
+            <button
+              type="button"
+              className="btn-request"
+              style={{ maxWidth: 180, margin: "0 auto" }}
+              onClick={() => refetchPlayers()}
+            >
+              Try again
+            </button>
           </div>
         ) : visiblePlayers.length === 0 ? (
           <div

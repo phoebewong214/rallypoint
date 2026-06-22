@@ -23,7 +23,7 @@ SWAGGER_TEMPLATE = {
     "swagger": "2.0",
     "info": {
         "title": "RallyPoint API",
-        "description": "AI-powered sports partner matching. All write/protected endpoints require an `Authorization: Bearer <jwt>` header obtained from `/api/auth/login`.",
+        "description": "AI-powered sports partner matching. Browser clients authenticate with the httpOnly `rp_session` cookie set by `/api/auth/login` and send `X-CSRF-Token` on unsafe methods. API/test clients may also send `Authorization: Bearer <jwt>`.",
         "version": "0.1.0",
     },
     "basePath": "/api",
@@ -33,7 +33,7 @@ SWAGGER_TEMPLATE = {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header",
-            "description": "JWT prefixed with `Bearer `, e.g. `Bearer eyJhbGciOi...`",
+            "description": "Optional API-client auth. JWT prefixed with `Bearer `, e.g. `Bearer eyJhbGciOi...`. Browser clients normally use the httpOnly session cookie instead.",
         }
     },
 }

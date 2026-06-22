@@ -1,7 +1,7 @@
 """
 POST /api/ai/match-reason
   body: {candidateId, sport}
-  hdrs: Authorization: Bearer <jwt>
+  auth: rp_session cookie + X-CSRF-Token, or Authorization: Bearer <jwt>
 
 Returns the persisted AI verdict, regenerating with the heuristic (or
 OpenAI if OPENAI_API_KEY is set) when no cached value exists.
