@@ -7,6 +7,7 @@ export interface ApiSession {
   opp: string | null;
   oppId: number | null;
   oppHandle: string | null;
+  oppNtrp: string | null;
   sentByMe: boolean;
   sport: "Tennis" | "Pickleball";
   court: string | null;

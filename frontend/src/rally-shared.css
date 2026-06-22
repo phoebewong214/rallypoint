@@ -3814,7 +3814,57 @@ textarea:focus-visible,
   font-weight: 700;
   font-family: var(--mono);
   opacity: 0.9;
+  flex: none;
 }
+
+/* Sport line at the top of a block: colored dot + sport + opponent rating chip. */
+.sched-block-sport {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.82;
+  min-width: 0;
+}
+.sb-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.sb-lvl {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  flex: none;
+}
+/* Bottom line: court (left, truncates) + time (right). */
+.sched-block-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.sched-block-foot .sched-block-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.sb-court { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-nocourt { font-style: italic; opacity: 0.65; }
 
 .sched-legend {
   display: flex;
@@ -3943,5 +3993,5 @@ textarea:focus-visible,
   .sched-cell { min-height: 44px; }
   .sched-block { padding: 5px 6px; }
   .sched-block-title { font-size: 10px; }
-  .sched-block-meta, .sched-block-time { display: none; }
+  .sched-block-meta, .sched-block-time, .sb-lvl { display: none; }
 }

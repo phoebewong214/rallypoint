@@ -73,6 +73,7 @@ class Session(db.Model):
 
     def to_dict(self, viewer_id: int) -> dict:
         opp = self.guest if viewer_id == self.host_id else self.host
+        opp_profile = opp.profile_for(self.sport) if opp else None
         return {
             "id": self.id,
             "bucket": self.bucket(viewer_id),
@@ -80,6 +81,7 @@ class Session(db.Model):
             "opp": opp.name if opp else None,
             "oppId": opp.id if opp else None,
             "oppHandle": opp.handle if opp else None,
+            "oppNtrp": opp_profile.ntrp if opp_profile else None,
             "sentByMe": self.host_id == viewer_id,
             "sport": self.sport,
             "court": self.court.name if self.court else None,
