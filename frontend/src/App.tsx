@@ -11,7 +11,6 @@ import VerifyPendingPage from "./pages/VerifyPendingPage";
 import FindPartnerPage from "./pages/FindPartnerPage";
 import ProfilePage from "./pages/ProfilePage";
 import SessionsPage from "./pages/SessionsPage";
-import SchedulePage from "./pages/SchedulePage";
 
 // Code-split the Courts pages: they pull in Leaflet (~150KB gz), which no other
 // page needs — keeping it out of the main bundle.
@@ -65,7 +64,8 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
+          {/* /schedule folded into the Profile page's Schedule tab; keep old links working. */}
+          <Route path="/schedule" element={<Navigate to="/profile?tab=schedule" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

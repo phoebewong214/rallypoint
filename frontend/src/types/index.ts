@@ -127,4 +127,4 @@ export type IconName =
   | "moon"
   | "menu";
 
-export type NavId = "find" | "matches" | "courts" | "schedule";
+export type NavId = "find" | "matches" | "courts";

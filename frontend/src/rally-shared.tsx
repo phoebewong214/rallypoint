@@ -146,7 +146,6 @@ const NAV_LINKS: NavLinkDef[] = [
   { id: "find",     label: "Find Partners", to: "/find" },
   { id: "matches",  label: "My Games",      to: "/sessions" },
   { id: "courts",   label: "Courts",        to: "/courts" },
-  { id: "schedule", label: "Schedule",      to: "/schedule" },
 ];
 
 export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) => {
