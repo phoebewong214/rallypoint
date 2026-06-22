@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
@@ -10,6 +10,8 @@ import { Spinner } from "../components/Skeleton";
 import type { Sport } from "../types";
 
 const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
+const AVAIL_BANDS = ["MORN", "AFT", "EVE"];
+const AVAIL_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 interface EditForm {
   name: string;
@@ -130,7 +132,39 @@ function ProfilePage() {
   const gamesPlayed = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").length;
   const partners = new Set(sessions.filter((s) => s.status !== "cancelled").map((s: any) => s.oppId).filter(Boolean)).size;
   const upcoming = sessions.filter((s) => s.bucket === "upcoming").length;
+  // Timetable: upcoming soonest-first, then recent past (no scores anywhere).
+  const upcomingGames = sessions
+    .filter((s) => s.bucket === "upcoming" && s.status !== "cancelled")
+    .slice().reverse().slice(0, 6);
   const recentGames = sessions.filter((s) => s.bucket === "past" && s.status !== "cancelled").slice(0, 6);
+
+  // Preferred times — real, editable weekly grid (AvailabilitySlot).
+  const availMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    (authUser?.availability ?? []).forEach((a) => { m[`${a.timeBand}-${a.dayOfWeek}`] = a.status; });
+    return m;
+  }, [authUser?.availability]);
+  const [editAvail, setEditAvail] = useState(false);
+  const [availDraft, setAvailDraft] = useState<Record<string, number>>({});
+  const [savingAvail, setSavingAvail] = useState(false);
+  const availGrid = editAvail ? availDraft : availMap;
+  const startEditAvail = () => { setAvailDraft({ ...availMap }); setEditAvail(true); };
+  const cycleCell = (key: string) => setAvailDraft((d) => ({ ...d, [key]: (((d[key] ?? 0) + 1) % 3) }));
+  const saveAvail = async () => {
+    setSavingAvail(true);
+    const availability = AVAIL_BANDS.flatMap((band) =>
+      [0, 1, 2, 3, 4, 5, 6].map((day) => ({ dayOfWeek: day, timeBand: band, status: availDraft[`${band}-${day}`] ?? 0 })),
+    );
+    try {
+      await updateProfile({ availability });
+      setEditAvail(false);
+      show("Availability updated", "success");
+    } catch (err: any) {
+      show(err?.message || "Couldn't save availability", "error");
+    } finally {
+      setSavingAvail(false);
+    }
+  };
 
   // Favorite courts — real, from CourtFavorite.
   const { data: courtsData } = useCourts({});
@@ -239,28 +273,51 @@ function ProfilePage() {
                 : <p className="bio" style={{ color: "var(--text-dim)" }}>No bio yet — tap Edit to tell other players about your game.</p>}
             </div>
 
-            {/* Recent games (no scores) */}
+            {/* Your games — timetable (upcoming + recent, no scores) */}
             <div className="panel">
               <div className="panel-head">
-                <h2 className="panel-title"><span className="ico green"><Icon name="calendar" size={15} /></span> Recent games</h2>
+                <h2 className="panel-title"><span className="ico green"><Icon name="calendar" size={15} /></span> Your games</h2>
                 <Link className="panel-action" to="/sessions">View all <Icon name="chevron-r" size={13} /></Link>
               </div>
-              {recentGames.length === 0 ? (
+              {upcomingGames.length === 0 && recentGames.length === 0 ? (
                 <div className="empty" style={{ padding: "28px 20px" }}>
                   <p className="empty-sub" style={{ margin: 0 }}>No games yet. <Link to="/find" style={{ color: "var(--green-deep)", fontWeight: 600 }}>Find a partner →</Link></p>
                 </div>
               ) : (
-                <div className="recent-list">
-                  {recentGames.map((m: any) => (
-                    <div key={m.id} className="recent-game">
-                      <div style={{ minWidth: 0 }}>
-                        <p className="rg-opp">{m.opp ? `with ${m.opp}` : "Game"}</p>
-                        <span className="rg-meta">{m.sport}{m.court ? ` · ${m.court}` : ""}</span>
+                <>
+                  {upcomingGames.length > 0 && (
+                    <>
+                      <div className="agenda-label">Upcoming</div>
+                      <div className="recent-list">
+                        {upcomingGames.map((m: any) => (
+                          <div key={m.id} className="recent-game">
+                            <div style={{ minWidth: 0 }}>
+                              <p className="rg-opp">{m.opp ? `with ${m.opp}` : "Game"}</p>
+                              <span className="rg-meta">{m.sport}{m.court ? ` · ${m.court}` : ""}{m.time ? ` · ${m.time}` : ""}</span>
+                            </div>
+                            <div className="rg-date rg-upcoming">{m.weekday}, {m.month} {m.day}</div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="rg-date">{m.weekday}, {m.month} {m.day}</div>
-                    </div>
-                  ))}
-                </div>
+                    </>
+                  )}
+                  {recentGames.length > 0 && (
+                    <>
+                      <div className="agenda-label">Recent</div>
+                      <div className="recent-list">
+                        {recentGames.map((m: any) => (
+                          <div key={m.id} className="recent-game">
+                            <div style={{ minWidth: 0 }}>
+                              <p className="rg-opp">{m.opp ? `with ${m.opp}` : "Game"}</p>
+                              <span className="rg-meta">{m.sport}{m.court ? ` · ${m.court}` : ""}</span>
+                            </div>
+                            <div className="rg-date">{m.weekday}, {m.month} {m.day}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -290,6 +347,53 @@ function ProfilePage() {
                     <div><div className="label">Also plays</div><div className="value">{p.sport} · {ratingLabel(p.sport)} {p.ntrp}</div></div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Preferred times — editable weekly grid */}
+            <div className="panel">
+              <div className="panel-head">
+                <h2 className="panel-title"><span className="ico green"><Icon name="clock" size={15} /></span> Preferred times</h2>
+                {editAvail ? (
+                  <button className="panel-action" type="button" onClick={saveAvail} disabled={savingAvail}>
+                    {savingAvail ? "Saving…" : "Save"}
+                  </button>
+                ) : (
+                  <button className="panel-action" type="button" onClick={startEditAvail}><Icon name="edit" size={13} /> Edit</button>
+                )}
+              </div>
+              <div className="avail-wrap" role="grid" aria-label="Weekly availability">
+                <div className="avail-label-col" />
+                <div className="avail-grid">
+                  {AVAIL_DAYS.map((d, i) => <div key={i} className="avail-cell day-label">{d}</div>)}
+                </div>
+                {AVAIL_BANDS.map((band) => (
+                  <React.Fragment key={band}>
+                    <div className="avail-label-col">{band}</div>
+                    <div className="avail-grid">
+                      {[0, 1, 2, 3, 4, 5, 6].map((day) => {
+                        const key = `${band}-${day}`;
+                        const v = availGrid[key] ?? 0;
+                        return (
+                          <div
+                            key={day}
+                            className={"avail-cell " + (v === 2 ? "on" : v === 1 ? "half" : "") + (editAvail ? " editable" : "")}
+                            title={v === 2 ? "Available" : v === 1 ? "Maybe" : "Unavailable"}
+                            role={editAvail ? "button" : undefined}
+                            tabIndex={editAvail ? 0 : undefined}
+                            onClick={editAvail ? () => cycleCell(key) : undefined}
+                            onKeyDown={editAvail ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cycleCell(key); } } : undefined}
+                          />
+                        );
+                      })}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11, color: "var(--text-low)", fontWeight: 600 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--green)", borderRadius: 3 }} /> Available</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--green-soft)", border: "1px solid var(--green)", borderRadius: 3 }} /> Maybe</span>
+                {editAvail && <span style={{ marginLeft: "auto" }}>Tap cells to cycle</span>}
               </div>
             </div>
 

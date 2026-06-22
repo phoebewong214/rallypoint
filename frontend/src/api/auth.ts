@@ -26,6 +26,7 @@ export interface UpdateProfileBody {
   location?: string;
   primarySport?: "Tennis" | "Pickleball";
   sportProfiles?: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt?: string; availabilitySummary?: string }[];
+  availability?: { dayOfWeek: number; timeBand: string; status: number }[];
 }
 
 export const authApi = {

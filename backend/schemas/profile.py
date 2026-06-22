@@ -11,12 +11,20 @@ class SportProfileInput(BaseModel):
     availabilitySummary: Optional[str] = Field(default=None, max_length=200)
 
 
+class AvailabilityInput(BaseModel):
+    dayOfWeek: int = Field(ge=0, le=6)
+    timeBand: Literal["MORN", "AFT", "EVE"]
+    status: int = Field(ge=0, le=2)
+
+
 class UpdateProfileSchema(BaseModel):
     """Partial profile update — every field optional, only sent ones touched.
     sportProfiles, when sent, is the complete desired set (the primary sport's
-    profile is always kept even if omitted)."""
+    profile is always kept even if omitted). availability, when sent, replaces
+    the whole weekly grid."""
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     bio: Optional[str] = Field(default=None, max_length=1000)
     location: Optional[str] = Field(default=None, max_length=120)
     primarySport: Optional[str] = Field(default=None, pattern=r"^(Tennis|Pickleball)$")
     sportProfiles: Optional[list[SportProfileInput]] = None
+    availability: Optional[list[AvailabilityInput]] = None

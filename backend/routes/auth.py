@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
-from models import User, SportProfile, Court
+from models import User, SportProfile, Court, AvailabilitySlot
 from schemas import (
     LoginSchema,
     SignupSchema,
@@ -241,6 +241,16 @@ def update_me():
         for sport, prof in existing.items():
             if sport not in desired and sport != new_primary:
                 user.sport_profiles.remove(prof)
+    if data.availability is not None:
+        # Replace the whole weekly grid; only store cells that are set (>0),
+        # matching the seed convention.
+        AvailabilitySlot.query.filter_by(user_id=user.id).delete()
+        for slot in data.availability:
+            if slot.status > 0:
+                db.session.add(AvailabilitySlot(
+                    user_id=user.id, day_of_week=slot.dayOfWeek,
+                    time_band=slot.timeBand, status=slot.status,
+                ))
     db.session.commit()
     return jsonify({"user": user.to_dict(with_email=True)})
 

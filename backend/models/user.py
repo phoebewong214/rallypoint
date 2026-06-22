@@ -72,6 +72,7 @@ class User(db.Model):
             "avatarFg": self.avatar_fg,
             "joined": self.created_at.strftime("%b %Y") if self.created_at else None,
             "sportProfiles": [p.to_dict() for p in self.sport_profiles],
+            "availability": [s.to_dict() for s in self.availability],
         }
         if with_email:
             out["email"] = self.email

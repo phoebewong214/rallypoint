@@ -36,6 +36,7 @@ export interface ProfilePatch {
   location?: string;
   primarySport?: "Tennis" | "Pickleball";
   sportProfiles?: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt?: string; availabilitySummary?: string }[];
+  availability?: { dayOfWeek: number; timeBand: string; status: number }[];
 }
 
 export interface SignupInput {
