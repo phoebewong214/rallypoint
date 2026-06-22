@@ -602,7 +602,7 @@ function ProfilePage() {
             <div className="sched-legend">
               <span className="lgi"><span className="sw pickleball" /> Pickleball</span>
               <span className="lgi"><span className="sw tennis" /> Tennis</span>
-              <Link to="/find" className="lgi" style={{ marginLeft: "auto", color: "var(--green-deep)", fontWeight: 600 }}>
+              <Link to="/find" className="lgi" style={{ marginLeft: "auto", color: "var(--green-deep)", fontWeight: 600, textDecoration: "none" }}>
                 <Icon name="plus" size={13} /> Find a partner
               </Link>
             </div>
