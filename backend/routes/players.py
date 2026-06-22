@@ -9,10 +9,11 @@ Query params:
               this sport) is one of them (default: any)
 """
 from flask import Blueprint, request, jsonify
+from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import User, SportProfile, Court, SavedPlayer
+from models import User, SportProfile, Court, SavedPlayer, AvailabilitySlot
 from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
 
@@ -53,13 +54,19 @@ def list_players():
     # Optional home-court filter: only players whose sport profile's home court
     # is one of the selected courts.
     court_slugs = [s.strip() for s in (request.args.get("courts") or "").split(",") if s.strip()]
+    # Optional preferred-time filter: only players available (maybe/yes) in ANY
+    # of the selected time bands (MORN/AFT/EVE). Players who haven't set a grid
+    # at all are kept (unknown ≠ unavailable), so the filter never silently hides
+    # legitimate partners.
+    time_bands = [b.strip().upper() for b in (request.args.get("timeBands") or "").split(",")
+                  if b.strip().upper() in ("MORN", "AFT", "EVE")]
 
-    # selectinload the candidates' sport profiles in one batched query so the
-    # per-candidate profile_for() / to_dict() below don't each fire a SELECT
-    # (was an N+1 over the whole candidate pool).
+    # selectinload the candidates' sport profiles + availability in batched
+    # queries so the per-candidate profile_for() / to_dict() below don't each
+    # fire a SELECT (was an N+1 over the whole candidate pool).
     candidates_q = (
         db.session.query(User)
-        .options(selectinload(User.sport_profiles))
+        .options(selectinload(User.sport_profiles), selectinload(User.availability))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
         .filter(SportProfile.sport == sport)
@@ -67,6 +74,16 @@ def list_players():
     if court_slugs:
         court_ids = [c.id for c in Court.query.filter(Court.slug.in_(court_slugs)).all()]
         candidates_q = candidates_q.filter(SportProfile.home_court_id.in_(court_ids or [-1]))
+    if time_bands:
+        has_match = (
+            AvailabilitySlot.query
+            .filter(AvailabilitySlot.user_id == User.id,
+                    AvailabilitySlot.time_band.in_(time_bands),
+                    AvailabilitySlot.status >= 1)
+            .exists()
+        )
+        no_grid = ~AvailabilitySlot.query.filter(AvailabilitySlot.user_id == User.id).exists()
+        candidates_q = candidates_q.filter(or_(has_match, no_grid))
     candidates = candidates_q.all()
 
     saved_ids = {s.player_id for s in SavedPlayer.query.filter_by(user_id=viewer.id).all()}
@@ -104,6 +121,7 @@ def list_players():
                 "sport": sport,
                 "ntrp": cand_profile.ntrp,
                 "availability": cand_profile.availability_summary,
+                "availabilitySlots": [s.to_dict() for s in cand.availability],
                 "saved": cand.id in saved_ids,
             }
         )

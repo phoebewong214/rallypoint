@@ -9,6 +9,7 @@ import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useCreateSession, useSessions } from "../hooks/useSessions";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { CourtMultiSelect } from "../components/CourtMultiSelect";
+import { TimeBandMultiSelect } from "../components/TimeBandMultiSelect";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 import { ApiError } from "../api/client";
@@ -353,23 +354,13 @@ function FilterBar({ filters, setFilters, courtOptions }) {
       </div>
 
       <div className="field">
-        <label className="field-label" htmlFor="time-select">
+        <label className="field-label">
           <Icon name="clock" size={13} /> Preferred Time
         </label>
-        <div className="select">
-          <select
-            id="time-select"
-            value={filters.time}
-            onChange={(e) => setFilters((f) => ({ ...f, time: e.target.value }))}
-          >
-            <option>Any time</option>
-            <option>Morning</option>
-            <option>Afternoon</option>
-            <option>Evening</option>
-            <option>Weekend</option>
-          </select>
-          <span className="select-caret"><Icon name="chevron" size={16} /></span>
-        </div>
+        <TimeBandMultiSelect
+          value={filters.timeBands}
+          onChange={(timeBands) => setFilters((f) => ({ ...f, timeBands }))}
+        />
       </div>
 
       <div className="field">
@@ -381,6 +372,35 @@ function FilterBar({ filters, setFilters, courtOptions }) {
           value={filters.courts}
           onChange={(courts) => setFilters((f) => ({ ...f, courts }))}
         />
+      </div>
+    </div>
+  );
+}
+
+const PREF_DOW = ["M", "T", "W", "T", "F", "S", "S"];
+const PREF_BANDS = ["MORN", "AFT", "EVE"];
+
+/* Compact read-only view of a player's preferred-times grid (set on their
+   Profile). Hidden entirely when they haven't marked any availability. */
+function PrefTimesMini({ slots }: { slots?: { dayOfWeek: number; timeBand: string; status: number }[] }) {
+  const map: Record<string, number> = {};
+  (slots ?? []).forEach((s) => { map[`${s.timeBand}-${s.dayOfWeek}`] = s.status; });
+  if (!(slots ?? []).some((s) => s.status > 0)) return null;
+  return (
+    <div className="pref-mini" aria-label="Preferred times">
+      <div className="pref-mini-title"><Icon name="clock" size={11} /> Preferred times</div>
+      <div className="pref-mini-grid">
+        <span />
+        {PREF_DOW.map((d, i) => <span key={i} className="pref-mini-dow">{d}</span>)}
+        {PREF_BANDS.map((band) => (
+          <React.Fragment key={band}>
+            <span className="pref-mini-band">{band[0]}</span>
+            {[0, 1, 2, 3, 4, 5, 6].map((day) => {
+              const v = map[`${band}-${day}`] ?? 0;
+              return <span key={day} className={"pref-mini-cell" + (v === 2 ? " on" : v === 1 ? " half" : "")} />;
+            })}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
@@ -434,6 +454,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
         </div>
       </div>
 
+      <PrefTimesMini slots={player.availabilitySlots} />
+
       <div
         className="ai-box"
         title="Based on skill match, location, and schedule overlap"
@@ -478,14 +500,6 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
   );
 }
 
-// Maps the "Preferred Time" option to keywords matched against a player's
-// availability text (e.g. "Weekday evenings", "Sat AM").
-const TIME_KEYWORDS: Record<string, string[]> = {
-  Morning: ["morning", "sat am", "early"],
-  Afternoon: ["afternoon", "lunch"],
-  Evening: ["evening", "weeknight", "night"],
-  Weekend: ["weekend", "saturday", "sunday", "sat", "sun"],
-};
 
 const DEMO_FALLBACK_ENABLED =
   import.meta.env.DEV || import.meta.env.VITE_DEMO_FALLBACK === "true";
@@ -494,7 +508,7 @@ function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
   const createSession = useCreateSession();
-  type Filters = { sport: Sport; ntrp: [number, number]; time: string; courts: string[] };
+  type Filters = { sport: Sport; ntrp: [number, number]; timeBands: string[]; courts: string[] };
   // Honor hints from a court's "Find partners" button: ?sport=…&court=…&courtName=…
   const [searchParams] = useSearchParams();
   const sportParam = searchParams.get("sport");
@@ -503,7 +517,7 @@ function FindPartnerPage() {
   const courtCtx = searchParams.get("courtName") || "";
   // Arriving from a court pre-selects it in the home-court filter.
   const DEFAULT_FILTERS: Filters = {
-    sport: initialSport, ntrp: [3.0, 4.0], time: "Any time", courts: courtSlug ? [courtSlug] : [],
+    sport: initialSport, ntrp: [3.0, 4.0], timeBands: [], courts: courtSlug ? [courtSlug] : [],
   };
   // Court options for the multi-select filter.
   const { data: courtsData } = useCourts({});
@@ -572,6 +586,7 @@ function FindPartnerPage() {
     ntrpMin: applied.ntrp[0],
     ntrpMax: applied.ntrp[1],
     courts: applied.courts,
+    timeBands: applied.timeBands,
   });
   // `liveMatches` is the array the backend returned — which may be EMPTY (a
   // real "no matches" answer). It's null only when the backend never responded
@@ -599,6 +614,7 @@ function FindPartnerPage() {
           id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
           online: p.online, location: p.location, distance: p.distance,
           sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
+          availabilitySlots: p.availabilitySlots ?? [],
           matchScore: p.matchScore, reason: p.reason, saved: p.saved,
           altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
@@ -614,6 +630,7 @@ function FindPartnerPage() {
             id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
             online: p.online, location: p.location, distance: p.distance,
             sport: applied.sport, ntrp: prof.ntrp, availability: prof.availability,
+            availabilitySlots: [],
             matchScore: prof.matchScore, reason: prof.reason, altSport: alt, saved: false,
           };
         })
@@ -625,15 +642,7 @@ function FindPartnerPage() {
       projected = [];
     }
 
-    /* Preferred-time filter — matched against each player's availability text. */
-    if (applied.time !== "Any time") {
-      const kw = TIME_KEYWORDS[applied.time] ?? [];
-      projected = projected.filter((p) => {
-        const a = (p.availability || "").toLowerCase();
-        return kw.some((k) => a.includes(k));
-      });
-    }
-
+    /* Preferred-time filtering is now done server-side (timeBands query param). */
     const distNum = (d: string) => {
       const n = parseFloat(d);
       return Number.isFinite(n) ? n : Infinity; // unknown distance ("—") sorts last
@@ -642,18 +651,18 @@ function FindPartnerPage() {
     else if (sort === "skill") projected.sort((a, b) => parseFloat(b.ntrp) - parseFloat(a.ntrp));
     else projected.sort((a, b) => b.matchScore - a.matchScore);
     return projected;
-  }, [liveMatches, showDemoMatches, applied.sport, applied.ntrp, applied.time, sort]);
-
-  const toggle = (set, setter) => (id) => {
-    const next = new Set(set);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setter(next);
-  };
+  }, [liveMatches, showDemoMatches, applied.sport, applied.ntrp, sort]);
 
   // Clicking "Request Game" opens the scheduling modal for that player so the
   // user picks a time (+ note) instead of a silent default.
   const [requestTarget, setRequestTarget] = useState<any | null>(null);
   const handleRequest = (id: number) => {
+    // Never let a request start against sample data — it would never reach a real
+    // player. (Demo data only appears in dev / when the server is unreachable.)
+    if (dataSource !== "live") {
+      show("These are sample players — connect to the server to send a real request.", "info");
+      return;
+    }
     setRequestTarget(visiblePlayers.find((p) => p.id === id) ?? null);
   };
 
@@ -661,10 +670,10 @@ function FindPartnerPage() {
     const target = requestTarget;
     if (!target) return;
     if (dataSource !== "live") {
-      // No backend to talk to — local-only acknowledgement.
-      toggle(requested, setRequested)(target.id);
+      // Safety net — should be unreachable since handleRequest gates this. Never
+      // fake a success: a request that didn't hit the backend never happened.
       setRequestTarget(null);
-      show("Request sent (example data)", "success");
+      show("Couldn't send — not connected to the server. Try again in a moment.", "error");
       return;
     }
     createSession.mutate(
