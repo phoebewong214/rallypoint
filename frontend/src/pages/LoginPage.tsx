@@ -489,17 +489,6 @@ function LoginPage() {
             )}
 
             {!isForgot && (
-              <>
-                <div className="divider-or">or continue with</div>
-
-                <button type="button" className="social-btn">
-                  <Icon name="google" size={18} />
-                  Continue with Google
-                </button>
-              </>
-            )}
-
-            {!isForgot && (
             <div className="auth-foot">
               {isSignup ? (
                 <>

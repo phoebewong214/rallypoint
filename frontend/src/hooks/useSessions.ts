@@ -3,11 +3,12 @@ import { sessionsApi } from "../api/sessions";
 
 const KEY = ["sessions"];
 
-export function useSessions() {
+export function useSessions(enabled = true) {
   return useQuery({
     queryKey: KEY,
     queryFn: sessionsApi.list,
     staleTime: 30_000,
+    enabled,
   });
 }
 
