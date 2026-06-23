@@ -102,4 +102,6 @@ class SportProfile(db.Model):
             "ntrp": self.ntrp,
             "availability": self.availability_summary,
             "homeCourtId": self.home_court_id,
+            "homeCourt": self.home_court.slug if self.home_court else None,
+            "homeCourtName": self.home_court.name if self.home_court else None,
         }

@@ -7,6 +7,8 @@ import { useSessions } from "../hooks/useSessions";
 import { useCourts } from "../hooks/useCourts";
 import { useSavedPlayers, useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { Spinner } from "../components/Skeleton";
+import { CourtPicker } from "../components/CourtPicker";
+import type { ApiCourt } from "../api/courts";
 import type { Sport } from "../types";
 
 const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
@@ -44,21 +46,24 @@ interface EditForm {
   location: string;
   primarySport: "Tennis" | "Pickleball";
   primaryNtrp: string;
+  primaryCourt: string | null;
   alsoPlay: boolean;
   secondaryNtrp: string;
+  secondaryCourt: string | null;
 }
 
 interface EditModalProps {
   initial: EditForm;
+  courtOptions: ApiCourt[];
   onClose: () => void;
   onSave: (patch: {
     name: string; bio: string; location: string;
     primarySport: "Tennis" | "Pickleball";
-    sportProfiles: { sport: "Tennis" | "Pickleball"; ntrp: string }[];
+    sportProfiles: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt: string }[];
   }) => Promise<void>;
 }
 
-function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
+function EditProfileModal({ initial, courtOptions, onClose, onSave }: EditModalProps) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const set = (k: keyof EditForm) => (e: any) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
@@ -67,8 +72,10 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const sportProfiles = [{ sport: form.primarySport, ntrp: form.primaryNtrp }];
-      if (form.alsoPlay) sportProfiles.push({ sport: otherSport, ntrp: form.secondaryNtrp });
+      // Send "" (not null) to clear a home court — update_me only writes the
+      // column when homeCourt is provided (a slug sets it, "" clears it).
+      const sportProfiles = [{ sport: form.primarySport, ntrp: form.primaryNtrp, homeCourt: form.primaryCourt ?? "" }];
+      if (form.alsoPlay) sportProfiles.push({ sport: otherSport, ntrp: form.secondaryNtrp, homeCourt: form.secondaryCourt ?? "" });
       await onSave({ name: form.name, bio: form.bio, location: form.location, primarySport: form.primarySport, sportProfiles });
     } finally {
       setSaving(false);
@@ -108,21 +115,31 @@ function EditProfileModal({ initial, onClose, onSave }: EditModalProps) {
             </div>
           </div>
           <div className="field">
+            <label className="field-label"><Icon name="pin" size={13} /> Home court ({form.primarySport})</label>
+            <CourtPicker options={courtOptions} value={form.primaryCourt} onChange={(c) => setForm((f) => ({ ...f, primaryCourt: c }))} />
+          </div>
+          <div className="field">
             <label className="checkbox-row">
               <input type="checkbox" checked={form.alsoPlay} onChange={(e) => set("alsoPlay")(e.target.checked)} />
               <span>I also play {otherSport}</span>
             </label>
           </div>
           {form.alsoPlay && (
-            <div className="field">
-              <label className="field-label"><Icon name="sparkles" size={13} /> {ratingLabel(otherSport)} ({otherSport})</label>
-              <div className="select">
-                <select value={form.secondaryNtrp} onChange={set("secondaryNtrp")}>
-                  {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <span className="select-caret"><Icon name="chevron" size={16} /></span>
+            <>
+              <div className="field">
+                <label className="field-label"><Icon name="sparkles" size={13} /> {ratingLabel(otherSport)} ({otherSport})</label>
+                <div className="select">
+                  <select value={form.secondaryNtrp} onChange={set("secondaryNtrp")}>
+                    {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <span className="select-caret"><Icon name="chevron" size={16} /></span>
+                </div>
               </div>
-            </div>
+              <div className="field">
+                <label className="field-label"><Icon name="pin" size={13} /> Home court ({otherSport})</label>
+                <CourtPicker options={courtOptions} value={form.secondaryCourt} onChange={(c) => setForm((f) => ({ ...f, secondaryCourt: c }))} />
+              </div>
+            </>
           )}
           <div className="field">
             <label className="field-label"><Icon name="edit" size={13} /> Bio</label>
@@ -425,10 +442,14 @@ function ProfilePage() {
                     <div><div className="label">Skill Level</div><div className="value value-mono">{ratingLabel(primaryProfile.sport)} {primaryProfile.ntrp}</div></div>
                   </div>
                 )}
+                <div className="info-row">
+                  <span className="ico blue"><Icon name="pin" size={16} /></span>
+                  <div><div className="label">Home court{primaryProfile ? ` (${primaryProfile.sport})` : ""}</div><div className="value">{primaryProfile?.homeCourtName ?? "—"}</div></div>
+                </div>
                 {otherProfiles.map((p) => (
                   <div className="info-row" key={p.sport}>
                     <span className="ico"><Icon name="sparkles" size={16} /></span>
-                    <div><div className="label">Also plays</div><div className="value">{p.sport} · {ratingLabel(p.sport)} {p.ntrp}</div></div>
+                    <div><div className="label">Also plays</div><div className="value">{p.sport} · {ratingLabel(p.sport)} {p.ntrp}{p.homeCourtName ? ` · ${p.homeCourtName}` : ""}</div></div>
                   </div>
                 ))}
               </div>
@@ -618,14 +639,17 @@ function ProfilePage() {
 
       {editOpen && (
         <EditProfileModal
+          courtOptions={courtsData?.courts ?? []}
           initial={{
             name: authUser?.name ?? "",
             bio: authUser?.bio ?? "",
             location: authUser?.location ?? "",
             primarySport: (primarySport as "Tennis" | "Pickleball") ?? "Pickleball",
             primaryNtrp: primaryProfile?.ntrp ?? "3.5",
+            primaryCourt: primaryProfile?.homeCourt ?? null,
             alsoPlay: otherProfiles.length > 0,
             secondaryNtrp: otherProfiles[0]?.ntrp ?? "3.5",
+            secondaryCourt: otherProfiles[0]?.homeCourt ?? null,
           }}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}
