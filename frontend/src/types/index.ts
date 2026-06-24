@@ -12,6 +12,8 @@ export interface UserSportProfile {
   ntrp: string;
   availability?: string | null;
   homeCourtId?: number | null;
+  homeCourt?: string | null; // court slug
+  homeCourtName?: string | null;
 }
 
 /** One availability cell from /me (day_of_week 0-6, time_band MORN/AFT/EVE, status 0-2). */

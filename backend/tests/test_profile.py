@@ -65,6 +65,24 @@ def test_cannot_save_self(client):
     assert client.post(f"/api/players/{uid}/save", headers=_h(tok)).status_code == 400
 
 
+def test_home_court_set_and_clear(client):
+    from extensions import db
+    from models import Court
+    db.session.add(Court(slug="lincoln-park", name="Lincoln Park Courts"))
+    db.session.commit()
+    tok, _ = _signup(client, "hc@rally.app", sport="Tennis", ntrp="3.5")
+    h = _h(tok)
+    r = client.patch("/api/auth/me", headers=h, json={
+        "sportProfiles": [{"sport": "Tennis", "ntrp": "3.5", "homeCourt": "lincoln-park"}]})
+    prof = next(p for p in r.get_json()["user"]["sportProfiles"] if p["sport"] == "Tennis")
+    assert prof["homeCourt"] == "lincoln-park" and prof["homeCourtName"] == "Lincoln Park Courts"
+    # sending "" clears the home court
+    r2 = client.patch("/api/auth/me", headers=h, json={
+        "sportProfiles": [{"sport": "Tennis", "ntrp": "3.5", "homeCourt": ""}]})
+    prof2 = next(p for p in r2.get_json()["user"]["sportProfiles"] if p["sport"] == "Tennis")
+    assert prof2["homeCourt"] is None and prof2["homeCourtName"] is None
+
+
 def test_set_and_replace_availability(client):
     tok, _ = _signup(client, "avail@rally.app")
     h = _h(tok)
