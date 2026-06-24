@@ -9,5 +9,6 @@ from .saved_player import SavedPlayer  # noqa: F401
 from .court_appointment import CourtAppointment, AppointmentParticipant  # noqa: F401
 from .court_checkin import CourtCheckIn  # noqa: F401
 from .session_model import Session, SessionStatus, SessionBucket  # noqa: F401
+from .game_invite import GameInvite, TimeProposal  # noqa: F401
 from .availability import AvailabilitySlot  # noqa: F401
 from .ai_match_log import AIMatchLog  # noqa: F401
