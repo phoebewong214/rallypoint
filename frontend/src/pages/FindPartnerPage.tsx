@@ -6,7 +6,8 @@ import { usePlayers } from "../hooks/usePlayers";
 import { useCourts } from "../hooks/useCourts";
 import { useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { PlayerCardSkeleton } from "../components/Skeleton";
-import { useCreateSession, useSessions } from "../hooks/useSessions";
+import { useSessions } from "../hooks/useSessions";
+import { useCreateInvite, useInvites } from "../hooks/useInvites";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { CourtMultiSelect } from "../components/CourtMultiSelect";
 import { TimeBandMultiSelect } from "../components/TimeBandMultiSelect";
@@ -507,7 +508,7 @@ const DEMO_FALLBACK_ENABLED =
 function FindPartnerPage() {
   const { show } = useToast();
   const { user: authUser } = useAuth();
-  const createSession = useCreateSession();
+  const createInvite = useCreateInvite();
   type Filters = { sport: Sport; ntrp: [number, number]; timeBands: string[]; courts: string[] };
   // Honor hints from a court's "Find partners" button: ?sport=…&court=…&courtName=…
   const [searchParams] = useSearchParams();
@@ -561,6 +562,9 @@ function FindPartnerPage() {
   // so the header never contradicts an offline player list with a false "0".
   const { data: sessionsData, isError: sessError } = useSessions();
   const sessions = sessionsData?.sessions ?? [];
+  // Open invites also count as a game "in the works" with that player.
+  const { data: invitesData } = useInvites();
+  const invites = invitesData?.invites ?? [];
   const statsReady = !!sessionsData && !sessError;
   // "Played" = games whose time has passed (and weren't cancelled). Same source
   // of truth as the Sessions page's Played count — no scoring involved.
@@ -569,8 +573,13 @@ function FindPartnerPage() {
   // Players we already have an open/active game with — drives the "Request sent"
   // button state from real data, so it's correct after a refresh.
   const activePartnerIds = useMemo(
-    () => new Set(sessions.filter((s) => s.bucket !== "past").map((s) => s.oppId).filter(Boolean)),
-    [sessions],
+    () => new Set(
+      [...sessions, ...invites]
+        .filter((s) => s.bucket !== "past")
+        .map((s) => s.oppId)
+        .filter(Boolean),
+    ),
+    [sessions, invites],
   );
 
   /* ---- Real backend matches via /api/players ----
@@ -666,7 +675,7 @@ function FindPartnerPage() {
     setRequestTarget(visiblePlayers.find((p) => p.id === id) ?? null);
   };
 
-  const confirmRequest = (iso: string, note?: string) => {
+  const confirmRequest = (startISO: string, endISO: string | null, note?: string) => {
     const target = requestTarget;
     if (!target) return;
     if (dataSource !== "live") {
@@ -676,24 +685,25 @@ function FindPartnerPage() {
       show("Couldn't send — not connected to the server. Try again in a moment.", "error");
       return;
     }
-    createSession.mutate(
-      { guestId: target.id, sport: applied.sport, scheduledAt: iso, note, court: courtSlug },
+    createInvite.mutate(
+      { inviteeId: target.id, sport: applied.sport, startAt: startISO, endAt: endISO, note, court: courtSlug },
       {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
           setRequestTarget(null);
-          show(`Request sent to ${target.name} — track it in My Games`, "success");
+          const how = endISO ? "Time-window invite sent" : "Invite sent";
+          show(`${how} to ${target.name} — track it in My Games`, "success");
         },
         onError: (err: any) => {
-          // 409 = an active game/request with this player already exists. That's
-          // not a failure — reflect it as already-sent and point them to it.
+          // 409 = an open invite with this player already exists. That's not a
+          // failure — reflect it as already-sent and point them to it.
           if (err instanceof ApiError && err.status === 409) {
             setRequested((prev) => new Set(prev).add(target.id));
             setRequestTarget(null);
             show(`You already have a game in the works with ${target.name} — see My Games`, "info");
             return;
           }
-          show(err?.message || "Couldn't send request", "error");
+          show(err?.message || "Couldn't send invite", "error");
         },
       }
     );
@@ -878,10 +888,11 @@ function FindPartnerPage() {
 
       {requestTarget && (
         <ScheduleModal
-          title={`Request a game with ${requestTarget.name}`}
-          subtitle={`${applied.sport}${courtCtx ? ` · at ${courtCtx}` : ""} · pick a time that works for you both`}
-          submitLabel="Send request"
-          busy={createSession.isPending}
+          title={`Invite ${requestTarget.name} to play`}
+          subtitle={`${applied.sport}${courtCtx ? ` · at ${courtCtx}` : ""} · offer a specific time or a window`}
+          submitLabel="Send invite"
+          allowWindow
+          busy={createInvite.isPending}
           onSubmit={confirmRequest}
           onClose={() => setRequestTarget(null)}
         />

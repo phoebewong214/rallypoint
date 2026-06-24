@@ -1,12 +1,15 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { IconName } from "../types";
-import type { ApiSession } from "../api/sessions";
 import { TopNav, Icon, Avatar } from "../rally-shared";
 import {
   useSessions, useAcceptSession, useDeclineSession,
   useCancelSession, useRescheduleSession,
 } from "../hooks/useSessions";
+import {
+  useInvites, useAcceptTime, useConfirmOpponent,
+  useProposeTime, useDeclineInvite, useCancelInvite,
+} from "../hooks/useInvites";
 import { useToast } from "../contexts/ToastContext";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -21,6 +24,7 @@ const StatusPill = ({ status }) => {
     requested: { label: "Needs your reply", cls: "requested" },
     completed: { label: "Completed", cls: "completed" },
     cancelled: { label: "Cancelled", cls: "cancelled" },
+    declined:  { label: "Declined", cls: "cancelled" },
   };
   const m = map[status] || { label: status, cls: "" };
   return (
@@ -31,14 +35,102 @@ const StatusPill = ({ status }) => {
   );
 };
 
-function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
-  s: any;
-  onAccept: (id: number) => void;
-  onDecline: (id: number) => void;
-  onCancel: (s: any) => void;
-  onReschedule: (s: any) => void;
-  busy?: boolean;
-}) {
+// Unified row callbacks — each takes the row and branches on s.kind at the page
+// level (invite vs legacy session), so SessionRow stays presentational.
+type RowHandlers = {
+  onAccept: (s: any) => void;          // accept the time on the table → confirm
+  onDecline: (s: any) => void;         // invited player rejects the invite
+  onCancel: (s: any) => void;          // either party calls it off / withdraws
+  onTimeChange: (s: any) => void;      // propose / counter / reschedule a time
+  onConfirmOpponent: (s: any) => void; // phase-1: agree to play (window invites)
+};
+
+// Short "Mon 3:00 PM – 5:00 PM" range for a time-window invite (the materialized
+// date-block only shows the window start).
+function windowRange(s: any): string | null {
+  if (!s.proposalEnd) return null;
+  try {
+    const end = new Date(s.proposalEnd).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `${s.time} – ${end}`;
+  } catch {
+    return null;
+  }
+}
+
+// The action buttons for one game/invite. Invites (kind === "invite") negotiate
+// in two phases; legacy sessions keep their original accept/reschedule/cancel.
+function RowActions({ s, h, busy }: { s: any; h: RowHandlers; busy?: boolean }) {
+  const isInvite = s.kind === "invite";
+  // The dismiss action: the invited player declines; the inviter withdraws.
+  const dismiss = isInvite && !s.sentByMe
+    ? <button className="btn-sm danger" type="button" onClick={() => h.onDecline(s)} disabled={busy}>Decline</button>
+    : <button className="btn-sm danger" type="button" onClick={() => h.onCancel(s)} disabled={busy}>Cancel</button>;
+
+  if (s.bucket === "past") return null;
+
+  if (!isInvite) {
+    // Legacy session: confirmed/pending → reschedule+cancel; requested → accept flow.
+    if (s.status === "confirmed" || s.status === "pending") {
+      return (
+        <>
+          <button className="btn-sm ghost" type="button" onClick={() => h.onTimeChange(s)} disabled={busy}>Reschedule</button>
+          <button className="btn-sm danger" type="button" onClick={() => h.onCancel(s)} disabled={busy}>Cancel</button>
+        </>
+      );
+    }
+    if (s.status === "requested") {
+      return (
+        <>
+          <button className="btn-sm primary" type="button" onClick={() => h.onAccept(s)} disabled={busy}>
+            <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
+          </button>
+          <button className="btn-sm ghost" type="button" onClick={() => h.onTimeChange(s)} disabled={busy}>Propose new time</button>
+          <button className="btn-sm danger" type="button" onClick={() => h.onDecline(s)} disabled={busy}>Decline</button>
+        </>
+      );
+    }
+    return null;
+  }
+
+  // Invite, your turn (status "requested").
+  if (s.status === "requested") {
+    return (
+      <>
+        {/* A specific time is on the table you didn't propose → one-tap accept. */}
+        {!s.isWindow && (
+          <button className="btn-sm primary" type="button" onClick={() => h.onAccept(s)} disabled={busy}>
+            <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
+          </button>
+        )}
+        {/* Phase 1 for a window invite: agree to play before settling the time. */}
+        {s.phase === "awaiting_opponent" && s.isWindow && (
+          <button className="btn-sm primary" type="button" onClick={() => h.onConfirmOpponent(s)} disabled={busy}>
+            <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Confirm opponent"}
+          </button>
+        )}
+        <button className="btn-sm ghost" type="button" onClick={() => h.onTimeChange(s)} disabled={busy}>
+          {s.isWindow ? "Suggest a time" : "Propose new time"}
+        </button>
+        {dismiss}
+      </>
+    );
+  }
+
+  // Invite, waiting on the other player (status "pending").
+  if (s.status === "pending") {
+    return (
+      <>
+        <button className="btn-sm ghost" type="button" onClick={() => h.onTimeChange(s)} disabled={busy}>Propose new time</button>
+        {dismiss}
+      </>
+    );
+  }
+
+  return null;
+}
+
+function SessionRow({ s, h, busy }: { s: any; h: RowHandlers; busy?: boolean }) {
+  const range = s.kind === "invite" && s.isWindow ? windowRange(s) : null;
   return (
     <article className={"session" + (s.next ? " next" : "")}>
       <div className="date-block">
@@ -59,12 +151,19 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
             <span className="sess-meta-item">
               <b>{s.sport}</b>
             </span>
-            <span className="sess-meta-item">
-              <Icon name="pin" size={14} /> {s.court}
-              {s.courtMiles && (
-                <span style={{ color: "var(--text-low)" }}>· {s.courtMiles} mi</span>
-              )}
-            </span>
+            {s.court && (
+              <span className="sess-meta-item">
+                <Icon name="pin" size={14} /> {s.court}
+                {s.courtMiles && (
+                  <span style={{ color: "var(--text-low)" }}>· {s.courtMiles} mi</span>
+                )}
+              </span>
+            )}
+            {range && (
+              <span className="sess-meta-item">
+                <Icon name="clock" size={14} /> any time {range}
+              </span>
+            )}
             {s.note && (
               <span style={{
                 width: "100%",
@@ -89,6 +188,8 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
         {s.bucket === "past" ? (
           s.status === "cancelled" ? (
             <span className="status-pill cancelled">Cancelled</span>
+          ) : s.status === "declined" ? (
+            <span className="status-pill cancelled">Declined</span>
           ) : (
             <span className="status-pill" style={{ opacity: 0.7 }}>Past game</span>
           )
@@ -97,27 +198,7 @@ function SessionRow({ s, onAccept, onDecline, onCancel, onReschedule, busy }: {
         )}
 
         <div className="sess-actions">
-          {s.bucket !== "past" && s.status === "confirmed" && (
-            <>
-              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)} disabled={busy}>Reschedule</button>
-              <button className="btn-sm danger" type="button" onClick={() => onCancel(s)} disabled={busy}>Cancel</button>
-            </>
-          )}
-          {s.bucket !== "past" && s.status === "pending" && (
-            <>
-              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)} disabled={busy}>Reschedule</button>
-              <button className="btn-sm danger" type="button" onClick={() => onCancel(s)} disabled={busy}>Cancel</button>
-            </>
-          )}
-          {s.bucket !== "past" && s.status === "requested" && (
-            <>
-              <button className="btn-sm primary" type="button" onClick={() => onAccept(s.id)} disabled={busy}>
-                <Icon name="check" size={14} stroke={2.5} /> {busy ? "…" : "Accept"}
-              </button>
-              <button className="btn-sm ghost" type="button" onClick={() => onReschedule(s)} disabled={busy}>Propose new time</button>
-              <button className="btn-sm danger" type="button" onClick={() => onDecline(s.id)} disabled={busy}>Decline</button>
-            </>
-          )}
+          <RowActions s={s} h={h} busy={busy} />
         </div>
       </div>
     </article>
@@ -174,55 +255,106 @@ function SessionsPage() {
      skeleton; on error a retry state. We never fall back to fabricated demo
      data — a real user with no games should see a true empty state. */
   const { data: apiData, isLoading, isError, refetch } = useSessions();
-  const sessions: ApiSession[] = apiData?.sessions ?? [];
+  const { data: invitesData } = useInvites();
+
+  // One viewer-relative feed of legacy sessions + two-phase invites. Both share
+  // the same bucket/status/date shape; `kind` drives the negotiation actions.
+  // Confirmed invites aren't listed (they show as the materialized session), so
+  // nothing is double-counted.
+  const sessions: any[] = useMemo(
+    () => [
+      ...(apiData?.sessions ?? []).map((s) => ({ kind: "session", ...s })),
+      ...(invitesData?.invites ?? []),
+    ],
+    [apiData, invitesData],
+  );
 
   // On first load, open straight to Requests if any are waiting on a reply, so
   // incoming invites aren't hidden behind the default Upcoming tab. After that
   // the user's own tab choice wins.
   const initialTabApplied = useRef(false);
   useEffect(() => {
-    if (initialTabApplied.current || !apiData) return;
+    if (initialTabApplied.current) return;
+    if (!apiData && !invitesData) return;
     initialTabApplied.current = true;
     if (sessions.some((s) => s.bucket === "requests")) setTab("requests");
-  }, [apiData, sessions]);
+  }, [apiData, invitesData, sessions]);
 
+  // Legacy session mutations.
   const accept = useAcceptSession();
   const decline = useDeclineSession();
   const cancel = useCancelSession();
   const reschedule = useRescheduleSession();
+  // Invite mutations.
+  const acceptTime = useAcceptTime();
+  const confirmOpponent = useConfirmOpponent();
+  const proposeTime = useProposeTime();
+  const declineInvite = useDeclineInvite();
+  const cancelInvite = useCancelInvite();
 
-  // The session being rescheduled / cancelled (each opens its own modal).
+  // Modal targets: rescheduling a legacy session vs. proposing a time on an
+  // invite use the same picker but different mutations; cancel goes through a
+  // confirm dialog for both.
   const [reschedTarget, setReschedTarget] = useState<any | null>(null);
+  const [proposeTarget, setProposeTarget] = useState<any | null>(null);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
 
-  const handleAccept = (id: number) => {
-    accept.mutate(id, {
-      onSuccess: () => show("Game confirmed", "success"),
-      onError:   () => show("Couldn't accept — try again", "error"),
+  const handleAccept = (s: any) => {
+    if (s.kind === "invite") {
+      acceptTime.mutate(s.id, {
+        onSuccess: () => show("Game confirmed 🎾 — see it in Upcoming", "success"),
+        onError: (e: any) => show(e?.message || "Couldn't accept — try again", "error"),
+      });
+    } else {
+      accept.mutate(s.id, {
+        onSuccess: () => show("Game confirmed", "success"),
+        onError:   () => show("Couldn't accept — try again", "error"),
+      });
+    }
+  };
+  const handleDecline = (s: any) => {
+    if (s.kind === "invite") {
+      declineInvite.mutate({ id: s.id }, {
+        onSuccess: () => show("Invite declined", "success"),
+        onError:   () => show("Couldn't decline — try again", "error"),
+      });
+    } else {
+      decline.mutate(s.id, {
+        onSuccess: () => show("Request declined", "success"),
+        onError:   () => show("Couldn't decline — try again", "error"),
+      });
+    }
+  };
+  const handleConfirmOpponent = (s: any) => {
+    confirmOpponent.mutate(s.id, {
+      onSuccess: () => show("You're in — now suggest a time", "success"),
+      onError: (e: any) => show(e?.message || "Couldn't confirm — try again", "error"),
     });
   };
-  const handleDecline = (id: number) => {
-    decline.mutate(id, {
-      onSuccess: () => show("Request declined", "success"),
-      onError:   () => show("Couldn't decline — try again", "error"),
-    });
+  const handleTimeChange = (s: any) => {
+    if (s.kind === "invite") setProposeTarget(s);
+    else setReschedTarget(s);
   };
-  // Cancelling a confirmed game is irreversible and notifies the other player,
-  // so it goes through a confirmation dialog rather than firing on one tap.
+  // Cancelling notifies the other player, so it goes through a confirm dialog.
   const confirmCancel = () => {
     if (!cancelTarget) return;
-    cancel.mutate(cancelTarget.id, {
-      onSuccess: () => {
-        setCancelTarget(null);
-        show("Game cancelled — we let them know", "success");
-      },
-      onError: () => show("Couldn't cancel — try again", "error"),
-    });
+    const done = (msg: string) => () => { setCancelTarget(null); show(msg, "success"); };
+    if (cancelTarget.kind === "invite") {
+      cancelInvite.mutate(cancelTarget.id, {
+        onSuccess: done(cancelTarget.sentByMe ? "Invite withdrawn" : "Invite cancelled"),
+        onError: () => show("Couldn't cancel — try again", "error"),
+      });
+    } else {
+      cancel.mutate(cancelTarget.id, {
+        onSuccess: done("Game cancelled — we let them know"),
+        onError: () => show("Couldn't cancel — try again", "error"),
+      });
+    }
   };
-  const handleReschedule = (iso: string, note?: string) => {
+  const handleReschedule = (startISO: string, _endISO: string | null, note?: string) => {
     if (!reschedTarget) return;
     reschedule.mutate(
-      { id: reschedTarget.id, scheduledAt: iso, note },
+      { id: reschedTarget.id, scheduledAt: startISO, note },
       {
         onSuccess: () => {
           setReschedTarget(null);
@@ -232,15 +364,41 @@ function SessionsPage() {
       },
     );
   };
-  const busyId = accept.isPending
-    ? accept.variables
-    : decline.isPending
-    ? decline.variables
-    : cancel.isPending
-    ? cancel.variables
-    : reschedule.isPending
-    ? reschedTarget?.id
-    : null;
+  const handlePropose = (startISO: string, endISO: string | null) => {
+    if (!proposeTarget) return;
+    proposeTime.mutate(
+      { id: proposeTarget.id, startAt: startISO, endAt: endISO },
+      {
+        onSuccess: () => {
+          setProposeTarget(null);
+          show("Time proposed — waiting on them to accept", "success");
+        },
+        onError: (e: any) => show(e?.message || "Couldn't propose — try again", "error"),
+      },
+    );
+  };
+
+  const handlers: RowHandlers = {
+    onAccept: handleAccept,
+    onDecline: handleDecline,
+    onCancel: setCancelTarget,
+    onTimeChange: handleTimeChange,
+    onConfirmOpponent: handleConfirmOpponent,
+  };
+
+  // Session and invite ids live in different tables and can collide, so rows are
+  // keyed by kind+id (for React keys AND busy tracking).
+  const rowKey = (s: any) => (s.kind === "invite" ? "i" : "s") + s.id;
+  const busyKeys = new Set<string>();
+  if (accept.isPending) busyKeys.add("s" + accept.variables);
+  if (decline.isPending) busyKeys.add("s" + decline.variables);
+  if (cancel.isPending) busyKeys.add("s" + cancel.variables);
+  if (reschedule.isPending && reschedTarget) busyKeys.add("s" + reschedTarget.id);
+  if (acceptTime.isPending) busyKeys.add("i" + acceptTime.variables);
+  if (confirmOpponent.isPending) busyKeys.add("i" + confirmOpponent.variables);
+  if (proposeTime.isPending && proposeTarget) busyKeys.add("i" + proposeTarget.id);
+  if (declineInvite.isPending) busyKeys.add("i" + (declineInvite.variables as any)?.id);
+  if (cancelInvite.isPending) busyKeys.add("i" + cancelInvite.variables);
 
   const counts = useMemo(() => ({
     upcoming: sessions.filter((s: any) => s.bucket === "upcoming").length,
@@ -248,7 +406,7 @@ function SessionsPage() {
     past:     sessions.filter((s: any) => s.bucket === "past").length,
   }), [sessions]);
 
-  // Real stats derived from the session list (no hardcoded numbers, no scores).
+  // Real stats derived from the feed (no hardcoded numbers, no scores).
   const stats = useMemo(() => {
     const pending = sessions.filter((s: any) => s.status === "pending");
     const pendingSent = pending.filter((s: any) => s.sentByMe).length;
@@ -260,7 +418,13 @@ function SessionsPage() {
     };
   }, [sessions]);
 
-  const visible = sessions.filter((s: any) => s.bucket === tab);
+  // Within a tab, show the soonest first (past: most recent first).
+  const visible = useMemo(() => {
+    const rows = sessions.filter((s: any) => s.bucket === tab);
+    const t = (s: any) => (s.scheduledAt ? new Date(s.scheduledAt).getTime() : 0);
+    rows.sort((a, b) => (tab === "past" ? t(b) - t(a) : t(a) - t(b)));
+    return rows;
+  }, [sessions, tab]);
 
   return (
     <>
@@ -372,15 +536,7 @@ function SessionsPage() {
                 </div>
               ) : (
                 visible.map((s: any) => (
-                  <SessionRow
-                    key={s.id}
-                    s={s}
-                    onAccept={handleAccept}
-                    onDecline={handleDecline}
-                    onCancel={setCancelTarget}
-                    onReschedule={setReschedTarget}
-                    busy={busyId === s.id}
-                  />
+                  <SessionRow key={rowKey(s)} s={s} h={handlers} busy={busyKeys.has(rowKey(s))} />
                 ))
               )}
             </div>
@@ -400,18 +556,39 @@ function SessionsPage() {
         />
       )}
 
+      {proposeTarget && (
+        <ScheduleModal
+          title="Suggest a time"
+          subtitle={
+            proposeTarget.isWindow
+              ? `Pick a specific time inside ${proposeTarget.opp ?? "their"} window`
+              : `with ${proposeTarget.opp ?? "your partner"}`
+          }
+          defaultISO={proposeTarget.scheduledAt}
+          // When countering a window, keep the pick inside the offered window.
+          minISO={proposeTarget.isWindow ? proposeTarget.scheduledAt : undefined}
+          maxISO={proposeTarget.isWindow ? proposeTarget.proposalEnd : undefined}
+          submitLabel="Send time"
+          busy={proposeTime.isPending}
+          onSubmit={handlePropose}
+          onClose={() => setProposeTarget(null)}
+        />
+      )}
+
       {cancelTarget && (
         <ConfirmDialog
-          title="Cancel this game?"
+          title={cancelTarget.kind === "invite" && cancelTarget.sentByMe ? "Withdraw this invite?" : "Cancel this game?"}
           body={
             cancelTarget.status === "confirmed"
               ? `Your confirmed game with ${cancelTarget.opp ?? "your partner"} will be called off and they'll be notified. This can't be undone.`
-              : `We'll withdraw this request${cancelTarget.opp ? ` to ${cancelTarget.opp}` : ""}. This can't be undone.`
+              : cancelTarget.kind === "invite" && cancelTarget.sentByMe
+                ? `We'll withdraw your invite${cancelTarget.opp ? ` to ${cancelTarget.opp}` : ""}. This can't be undone.`
+                : `We'll call off this game${cancelTarget.opp ? ` with ${cancelTarget.opp}` : ""}. This can't be undone.`
           }
           confirmLabel="Yes, cancel"
           cancelLabel="Keep it"
           danger
-          busy={cancel.isPending}
+          busy={cancel.isPending || cancelInvite.isPending}
           onConfirm={confirmCancel}
           onClose={() => setCancelTarget(null)}
         />

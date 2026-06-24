@@ -15,7 +15,7 @@ specific time until one side accepts.
   POST /api/invites/<id>/cancel            either party calls it off
   GET  /api/invites                        the viewer's open invites (read path)
 """
-from flask import Blueprint, jsonify
+from flask import Blueprint, current_app, jsonify
 from sqlalchemy import or_
 
 from extensions import db
@@ -25,6 +25,7 @@ from models.game_invite import (
     PHASE_DECLINED, PHASE_CANCELLED, OPEN_PHASES,
 )
 from schemas.invites import CreateInviteSchema, ProposeTimeSchema, DeclineInviteSchema
+from services.email import send_email
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -36,6 +37,34 @@ def _get_or_404(invite_id: int):
     if inv is None:
         return None, (jsonify({"error": "Invite not found"}), 404)
     return inv, None
+
+
+def _games_url() -> str:
+    base = current_app.config.get("APP_BASE_URL", "").rstrip("/")
+    return f"{base}/sessions"
+
+
+def _fmt(dt) -> str:
+    return dt.strftime("%a %b %-d, %-I:%M %p") if dt else "the proposed time"
+
+
+def _other_party(inv: GameInvite, viewer_id: int) -> User:
+    """The participant who ISN'T the actor — i.e. who to notify."""
+    return inv.invitee if viewer_id == inv.inviter_id else inv.inviter
+
+
+def _notify(user: User, subject: str, body: str) -> None:
+    """Best-effort 'your turn' email — a mail failure must never break the
+    request, so everything is swallowed (send_email is already non-raising, but
+    building the body / reading relationships could still throw)."""
+    try:
+        if user and user.email:
+            send_email(
+                user.email, subject,
+                f"{body}\n\nOpen it in My Games: {_games_url()}\n\n— RallyPoint",
+            )
+    except Exception:  # noqa: BLE001 — never let email failure break the request
+        pass
 
 
 @invites_bp.get("")
@@ -97,6 +126,12 @@ def create_invite():
         start_at=data.startAt, end_at=data.endAt,
     ))
     db.session.commit()
+    _notify(
+        inv.invitee,
+        f"{viewer.name} invited you to play {data.sport}",
+        f"{viewer.name} wants to play {data.sport} with you on RallyPoint. "
+        "Accept the time, suggest another, or decline.",
+    )
     return jsonify({"invite": inv.to_dict(viewer.id)}), 201
 
 
@@ -113,6 +148,12 @@ def confirm_opponent(invite_id: int):
         return jsonify({"error": "This invite isn't awaiting confirmation"}), 409
     inv.phase = PHASE_SETTLING
     db.session.commit()
+    _notify(
+        inv.inviter,
+        f"{viewer.name} is in — now settle a time",
+        f"{viewer.name} confirmed they want to play your {inv.sport} game. "
+        "Suggest a time (or accept theirs) to lock it in.",
+    )
     return jsonify({"invite": inv.to_dict(viewer.id)})
 
 
@@ -138,6 +179,12 @@ def propose_time(invite_id: int):
         start_at=data.startAt, end_at=data.endAt,
     ))
     db.session.commit()
+    _notify(
+        _other_party(inv, viewer.id),
+        f"{viewer.name} proposed a time",
+        f"{viewer.name} suggested {_fmt(data.startAt)} for your {inv.sport} game. "
+        "Accept it or counter with another time.",
+    )
     return jsonify({"invite": inv.to_dict(viewer.id)})
 
 
@@ -173,6 +220,12 @@ def accept_time(invite_id: int):
     inv.phase = PHASE_CONFIRMED
     inv.session_id = s.id
     db.session.commit()
+    _notify(
+        _other_party(inv, viewer.id),
+        f"Game on 🎾 — {viewer.name} accepted {_fmt(proposal.start_at)}",
+        f"{viewer.name} accepted your time. Your {inv.sport} game is confirmed "
+        f"for {_fmt(proposal.start_at)}. See you on court!",
+    )
     return jsonify({"invite": inv.to_dict(viewer.id), "session": s.to_dict(viewer.id)})
 
 
@@ -191,6 +244,12 @@ def decline_invite(invite_id: int):
     inv.phase = PHASE_DECLINED
     inv.decline_reason = data.reason
     db.session.commit()
+    _notify(
+        inv.inviter,
+        f"{viewer.name} declined your invite",
+        f"{viewer.name} can't make the {inv.sport} game this time."
+        + (f' They said: "{data.reason}"' if data.reason else ""),
+    )
     return jsonify({"invite": inv.to_dict(viewer.id)})
 
 
@@ -207,4 +266,10 @@ def cancel_invite(invite_id: int):
         return jsonify({"error": "This invite is no longer open"}), 409
     inv.phase = PHASE_CANCELLED
     db.session.commit()
+    _notify(
+        _other_party(inv, viewer.id),
+        f"{viewer.name} called off the game",
+        f"{viewer.name} cancelled the {inv.sport} game you were arranging. "
+        "No worries — find another partner any time.",
+    )
     return jsonify({"invite": inv.to_dict(viewer.id)})
