@@ -48,7 +48,7 @@ export function ConfirmDialog({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "100%", maxWidth: 400, background: "var(--bg-1)",
+          width: "100%", maxWidth: 400, background: "var(--card)",
           border: "1px solid var(--border)", borderRadius: 16, padding: 24,
           display: "flex", flexDirection: "column", gap: 12,
           boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
