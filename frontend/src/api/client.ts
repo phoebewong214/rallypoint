@@ -44,33 +44,55 @@ export interface ApiOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
 }
 
+/* Free-tier cold start: Render sleeps after inactivity and the first request can
+   take ~50s. We must NOT abort (a request that's waking the server up should be
+   allowed to finish) — instead we flag the request "slow" after a threshold and
+   broadcast it (ref-counted across concurrent requests) so the UI can show a
+   non-blocking "server waking up" banner. */
+const SLOW_AFTER_MS = 4000;
+let slowCount = 0;
+function setSlow(delta: number): void {
+  const before = slowCount;
+  slowCount = Math.max(0, slowCount + delta);
+  if (typeof window === "undefined") return;
+  if (before === 0 && slowCount > 0) window.dispatchEvent(new CustomEvent("api:slow", { detail: true }));
+  else if (before > 0 && slowCount === 0) window.dispatchEvent(new CustomEvent("api:slow", { detail: false }));
+}
+
 export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
   const { body, headers, ...rest } = opts;
   const method = (rest.method || "GET").toUpperCase();
   const csrf = readCookie(CSRF_COOKIE);
-  const res = await fetch(API_BASE + path, {
-    ...rest,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(!SAFE_METHODS.has(method) && csrf ? { "X-CSRF-Token": csrf } : {}),
-      ...(headers || {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let parsed: any = null;
+  let markedSlow = false;
+  const slowTimer = setTimeout(() => { markedSlow = true; setSlow(+1); }, SLOW_AFTER_MS);
   try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = text;
-  }
-  if (!res.ok) {
-    // 401 → broadcast so the AuthContext can sign the user out.
-    if (res.status === 401 && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("auth:expired"));
+    const res = await fetch(API_BASE + path, {
+      ...rest,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(!SAFE_METHODS.has(method) && csrf ? { "X-CSRF-Token": csrf } : {}),
+        ...(headers || {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let parsed: any = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = text;
     }
-    throw new ApiError(parsed?.error || res.statusText, res.status, parsed);
+    if (!res.ok) {
+      // 401 → broadcast so the AuthContext can sign the user out.
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("auth:expired"));
+      }
+      throw new ApiError(parsed?.error || res.statusText, res.status, parsed);
+    }
+    return parsed as T;
+  } finally {
+    clearTimeout(slowTimer);
+    if (markedSlow) setSlow(-1);
   }
-  return parsed as T;
 }

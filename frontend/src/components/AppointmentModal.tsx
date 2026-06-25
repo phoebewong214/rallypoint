@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Icon } from "../rally-shared";
 import { Spinner } from "./Skeleton";
+import { Modal } from "./Modal";
 import type { CreateAppointmentBody } from "../api/appointments";
 
 /* Create an open game ("appointment") at a court: pick a time, sport, how many
@@ -33,13 +34,6 @@ export function AppointmentModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const minWhen = toLocalInput(new Date());
 
-  useEffect(() => {
-    inputRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!when) return;
@@ -47,10 +41,7 @@ export function AppointmentModal({
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Make an appointment" onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16 }}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit}
-        style={{ width: "100%", maxWidth: 440, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+    <Modal ariaLabel="Make an appointment" onClose={onClose} maxWidth={440} onSubmit={submit} initialFocusRef={inputRef}>
         <div>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Make an appointment</h3>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-dim)" }}>Open game at {courtName} — others can join</p>
@@ -98,8 +89,7 @@ export function AppointmentModal({
             {busy ? <><Spinner /> Posting…</> : "Post open game"}
           </button>
         </div>
-      </form>
-    </div>
+    </Modal>
   );
 }
 

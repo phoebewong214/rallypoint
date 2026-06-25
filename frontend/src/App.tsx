@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { WakeBanner } from "./components/WakeBanner";
 
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -29,6 +30,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <WakeBanner />
         <Routes>
           <Route path="/" element={<PublicOnly><LoginPage /></PublicOnly>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
