@@ -51,6 +51,41 @@ def unseed_demo_cmd():
     unseed_demo()
 
 
+def migrate_deploy():
+    """Deploy-time DB bring-up via Alembic — safe on the free tier (no shell):
+
+    - brand-new DB        → `upgrade` runs the baseline migration → all tables.
+    - existing pre-Alembic DB (made by the old init-db/create_all) → adopt it by
+      stamping the baseline first, so `upgrade` doesn't try to re-create tables.
+    - already-migrated DB → just `upgrade` (applies anything newer).
+
+    Always finishes with create_all() as an idempotent safety net: a deploy can
+    never boot with a missing table, even if a migration is mis-authored. Use
+    this as the deploy command instead of `init-db` once migrations exist.
+    """
+    from flask_migrate import upgrade, stamp
+    from sqlalchemy import inspect
+
+    app = create_app()
+    with app.app_context():
+        insp = inspect(db.engine)
+        has_alembic = insp.has_table("alembic_version")
+        has_core = insp.has_table("users")
+        if not has_alembic and has_core:
+            # Existing schema predates Alembic → mark it at head (== baseline at
+            # adoption time) so we don't replay CREATE TABLEs that already exist.
+            print("migrate-deploy: existing schema found — stamping baseline")
+            stamp()
+        try:
+            upgrade()
+            print("migrate-deploy: migrations up to date")
+        except Exception as e:  # noqa: BLE001 — never block boot on a bad migration
+            print(f"migrate-deploy: upgrade failed ({e}); relying on create_all")
+        # Idempotent safety net: create_all never drops/alters, only adds missing.
+        db.create_all()
+        print("migrate-deploy: done")
+
+
 def build_courts_cmd():
     from import_courts import build
     build()
@@ -63,6 +98,7 @@ def import_courts_cmd():
 
 COMMANDS = {
     "init-db": init_db,
+    "migrate-deploy": migrate_deploy,
     "seed": seed,
     "seed-demo": seed_demo_cmd,
     "unseed-demo": unseed_demo_cmd,
