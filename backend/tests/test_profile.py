@@ -65,6 +65,16 @@ def test_cannot_save_self(client):
     assert client.post(f"/api/players/{uid}/save", headers=_h(tok)).status_code == 400
 
 
+def test_update_location_and_coords(client):
+    tok, _ = _signup(client, "loc@rally.app")
+    r = client.patch("/api/auth/me", headers=_h(tok),
+                     json={"location": "Hyde Park", "lat": 41.794, "lng": -87.590})
+    assert r.status_code == 200, r.get_json()
+    u = r.get_json()["user"]
+    assert u["location"] == "Hyde Park"
+    assert abs(u["lat"] - 41.794) < 1e-6 and abs(u["lng"] + 87.590) < 1e-6
+
+
 def test_home_court_set_and_clear(client):
     from extensions import db
     from models import Court

@@ -86,7 +86,7 @@ def signup():
             name:     {type: string, minLength: 1,     example: "Alex Rivera"}
             sport:    {type: string, enum: [Tennis, Pickleball], default: Pickleball}
             ntrp:     {type: string, enum: ["2.0","2.5","3.0","3.5","4.0","4.5","5.0"], default: "3.5"}
-            location: {type: string, example: "Berkeley, CA"}
+            location: {type: string, example: "Lincoln Park"}
     responses:
       201:
         description: Account created + JWT issued
@@ -213,6 +213,10 @@ def update_me():
         user.bio = data.bio
     if data.location is not None:
         user.location = data.location
+    if data.lat is not None:
+        user.lat = data.lat
+    if data.lng is not None:
+        user.lng = data.lng
     if data.primarySport is not None:
         user.primary_sport = data.primarySport
     if data.sportProfiles is not None:
