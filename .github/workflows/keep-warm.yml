@@ -1,0 +1,27 @@
+name: Keep API warm
+
+# Render's free tier sleeps after ~15 min idle; the first request then takes
+# ~50s (measured), which makes real actions look broken ("stuck on Sending…").
+# Pinging the health endpoint on a schedule keeps the instance awake so users
+# rarely hit a cold start.
+#
+# Caveats: GitHub's scheduled cron can be delayed under load and only runs from
+# the default branch. For a tighter guarantee use an external monitor instead
+# (e.g. UptimeRobot — free, 5-min interval, also gives uptime alerts). The real
+# fix is upgrading off the free tier; this is a zero-cost mitigation.
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          curl -fsS --max-time 120 https://api.tryrallypoint.com/api/health \
+            -w "\nHTTP %{http_code} in %{time_total}s\n"
