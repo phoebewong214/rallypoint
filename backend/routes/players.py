@@ -100,7 +100,7 @@ def list_players():
         if not (ntrp_lo <= n <= ntrp_hi):
             continue
 
-        score, reason, dist_miles = score_and_reason(viewer, cand, sport)
+        m = score_and_reason(viewer, cand, sport)
         tennis = cand.profile_for("Tennis")
         pickleball = cand.profile_for("Pickleball")
 
@@ -112,12 +112,14 @@ def list_players():
                 "color": cand.avatar_color,
                 "fg": cand.avatar_fg,
                 "location": cand.location,
-                "distance": f"{dist_miles:.1f}" if dist_miles is not None else "—",
+                "distance": f"{m['distance']:.1f}" if m["distance"] is not None else "—",
                 "online": False,
                 "tennis": tennis.to_dict() if tennis else None,
                 "pickleball": pickleball.to_dict() if pickleball else None,
-                "matchScore": score,
-                "reason": reason,
+                "matchScore": m["score"],
+                "matchTier": m["tier"],
+                "matchReasons": m["reasons"],
+                "reason": m["summary"],
                 "sport": sport,
                 "ntrp": cand_profile.ntrp,
                 "availability": cand_profile.availability_summary,

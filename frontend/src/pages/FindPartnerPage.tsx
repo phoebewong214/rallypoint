@@ -378,6 +378,8 @@ function FilterBar({ filters, setFilters, courtOptions }) {
   );
 }
 
+const TIER_LABEL: Record<string, string> = { great: "Great match", good: "Good match", fair: "Worth a try" };
+
 const PREF_DOW = ["M", "T", "W", "T", "F", "S", "S"];
 const PREF_BANDS = ["MORN", "AFT", "EVE"];
 
@@ -457,20 +459,17 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
 
       <PrefTimesMini slots={player.availabilitySlots} />
 
-      <div
-        className="ai-box"
-        title="Based on skill match, location, and schedule overlap"
-      >
-        <div className="ai-ico"><Icon name="sparkles" size={14} stroke={2.4} /></div>
-        <div className="ai-content">
-          <div className="ai-label">
-            AI Match
-            <span className="ai-score" tabIndex={0}>
-              · {player.matchScore}% fit
-            </span>
-          </div>
-          <p className="ai-text">{player.reason}</p>
+      <div className="match-box" title="Based on skill, distance, schedule overlap, and home court">
+        <div className={"match-tier " + (player.matchTier ?? "good")}>
+          <Icon name="sparkles" size={13} stroke={2.4} /> {TIER_LABEL[player.matchTier ?? "good"]}
         </div>
+        {player.matchReasons && player.matchReasons.length > 0 ? (
+          <div className="match-chips">
+            {player.matchReasons.map((r: string) => <span key={r} className="match-chip">{r}</span>)}
+          </div>
+        ) : (
+          <p className="match-text">{player.reason}</p>
+        )}
       </div>
 
       <div className="card-action">
@@ -624,7 +623,7 @@ function FindPartnerPage() {
           online: p.online, location: p.location, distance: p.distance,
           sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
           availabilitySlots: p.availabilitySlots ?? [],
-          matchScore: p.matchScore, reason: p.reason, saved: p.saved,
+          matchScore: p.matchScore, matchTier: p.matchTier, matchReasons: p.matchReasons, reason: p.reason, saved: p.saved,
           altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
       });

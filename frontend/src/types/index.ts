@@ -67,6 +67,8 @@ export interface Player {
   availability?: string;
   availabilitySlots?: AvailabilitySlotDTO[];
   matchScore?: number;
+  matchTier?: "great" | "good" | "fair";
+  matchReasons?: string[];
   reason?: string;
   saved?: boolean;
 }

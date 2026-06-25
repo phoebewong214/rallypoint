@@ -1508,6 +1508,40 @@ textarea:focus-visible,
   font-weight: 600;
 }
 
+/* Match panel on a Find Partner card: an honest tier + concrete reason chips
+   (replaces the old "AI Match · N% fit" black box). */
+.match-box {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.match-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 800;
+}
+.match-tier.great { color: var(--green-deep); }
+.match-tier.good { color: var(--blue); }
+.match-tier.fair { color: var(--text-dim); }
+.match-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.match-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.match-text { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+
 .ai-box {
   background: var(--blue-ghost);
   border: 1px solid var(--blue-border);

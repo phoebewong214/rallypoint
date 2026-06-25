@@ -62,7 +62,8 @@ def match_reason():
     data = parse_json(MatchReasonSchema)
 
     cand = User.query.get_or_404(data.candidateId)
-    score, heuristic_reason, _dist = score_and_reason(viewer, cand, data.sport)
+    m = score_and_reason(viewer, cand, data.sport)
+    score, heuristic_reason = m["score"], m["summary"]
 
     source = "heuristic"
     reason = heuristic_reason
