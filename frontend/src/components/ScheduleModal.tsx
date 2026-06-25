@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Icon } from "../rally-shared";
 import { Spinner } from "./Skeleton";
+import { Modal } from "./Modal";
 
 /* Pick a time for a game (+ optional note). Used three ways:
    - Find Partner: propose a SPECIFIC time OR an open WINDOW (allowWindow).
@@ -63,16 +64,6 @@ export function ScheduleModal({
   const maxWhen = maxISO ? toLocalInput(new Date(maxISO)) : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Esc closes; focus lands on the date field when the dialog opens.
-  useEffect(() => {
-    inputRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const windowInvalid = mode === "window" && new Date(end) <= new Date(start);
 
   const submit = (e: React.FormEvent) => {
@@ -103,26 +94,7 @@ export function ScheduleModal({
   );
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16,
-      }}
-    >
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-        style={{
-          width: "100%", maxWidth: 420, background: "var(--card)",
-          border: "1px solid var(--border)", borderRadius: 16, padding: 24,
-          display: "flex", flexDirection: "column", gap: 14,
-          boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-        }}
-      >
+    <Modal ariaLabel={title} onClose={onClose} maxWidth={420} onSubmit={submit} initialFocusRef={inputRef}>
         <div>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{title}</h3>
           {subtitle && (
@@ -207,8 +179,7 @@ export function ScheduleModal({
             {busy ? <><Spinner /> Sending…</> : submitLabel}
           </button>
         </div>
-      </form>
-    </div>
+    </Modal>
   );
 }
 
