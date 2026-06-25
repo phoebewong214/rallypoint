@@ -9,5 +9,6 @@ env/
 *.db
 *.sqlite3
 instance/
-migrations/versions/*.py
-!migrations/versions/.gitkeep
+# Alembic migration scripts MUST be committed (the deploy runs `flask db
+# upgrade` against them) — only ignore their compiled cache.
+migrations/versions/__pycache__/
