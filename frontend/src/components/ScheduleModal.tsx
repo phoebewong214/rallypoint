@@ -117,7 +117,7 @@ export function ScheduleModal({
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
         style={{
-          width: "100%", maxWidth: 420, background: "var(--bg-1)",
+          width: "100%", maxWidth: 420, background: "var(--card)",
           border: "1px solid var(--border)", borderRadius: 16, padding: 24,
           display: "flex", flexDirection: "column", gap: 14,
           boxShadow: "0 24px 60px rgba(0,0,0,0.4)",

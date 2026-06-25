@@ -50,7 +50,7 @@ export function AppointmentModal({
     <div role="dialog" aria-modal="true" aria-label="Make an appointment" onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16 }}>
       <form onClick={(e) => e.stopPropagation()} onSubmit={submit}
-        style={{ width: "100%", maxWidth: 440, background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+        style={{ width: "100%", maxWidth: 440, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Make an appointment</h3>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-dim)" }}>Open game at {courtName} — others can join</p>
