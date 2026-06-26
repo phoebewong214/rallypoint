@@ -66,6 +66,36 @@ def test_strong_match_beats_weak_match(client):
                    for c in weak["matchReasons"])
 
 
+def test_cosine_basics():
+    from services.embeddings import cosine
+    assert cosine([1, 0], [1, 0]) == 1.0
+    assert abs(cosine([1, 0], [0, 1])) < 1e-9
+    assert cosine(None, [1, 0]) == 0.0
+    assert cosine([1, 2], [1, 2, 3]) == 0.0  # mismatched length → 0
+
+
+def test_semantic_signal_adds_style_chip(client):
+    """With similar bio embeddings, the match gains a 'similar playing style'
+    chip (the genuine-AI signal) — injected directly, no OpenAI call needed."""
+    import json
+    from extensions import db
+    from models import User
+    tv, _ = _signup(client, "sem_v@rally.app", ntrp="3.5")
+    _ts, sid = _signup(client, "sem_s@rally.app", ntrp="3.5")
+    User.query.filter_by(email="sem_v@rally.app").first().bio_embedding = json.dumps([0.98, 0.1, 0.0])
+    User.query.filter_by(email="sem_s@rally.app").first().bio_embedding = json.dumps([1.0, 0.0, 0.0])
+    db.session.commit()
+    row = _row(client, _h(tv), sid)
+    assert any("similar playing style" in r.lower() for r in row["matchReasons"])
+
+
+def test_no_embedding_no_style_chip(client):
+    tv, _ = _signup(client, "sem2_v@rally.app", ntrp="3.5")
+    _ts, sid = _signup(client, "sem2_s@rally.app", ntrp="3.5")
+    row = _row(client, _h(tv), sid)
+    assert not any("similar playing style" in r.lower() for r in row.get("matchReasons", []))
+
+
 def test_score_spreads_not_everyone_the_same(client):
     """Three candidates at different distances/levels must not all tie."""
     tv, _ = _signup(client, "spread_v@rally.app", ntrp="3.5", lat=41.880, lng=-87.630)
