@@ -5,6 +5,7 @@ POST /api/auth/signup  body: {email, password, name, sport?, ntrp?, location?}
 POST /api/auth/login   body: {email, password}
 GET  /api/auth/me      cookie: rp_session (or Authorization: Bearer <jwt>)
 """
+import json
 import re
 from flask import Blueprint, jsonify, request, current_app, make_response
 from flask_limiter.util import get_remote_address
@@ -14,6 +15,7 @@ from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
 from models import User, SportProfile, Court, AvailabilitySlot
+from services.embeddings import embed_text
 from schemas import (
     LoginSchema,
     SignupSchema,
@@ -211,6 +213,9 @@ def update_me():
         user.name = data.name
     if data.bio is not None:
         user.bio = data.bio
+        # Re-embed the bio for semantic matching (no-op without OPENAI_API_KEY).
+        vec = embed_text(data.bio)
+        user.bio_embedding = json.dumps(vec) if vec else None
     if data.location is not None:
         user.location = data.location
     if data.primarySport is not None:
