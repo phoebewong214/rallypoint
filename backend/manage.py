@@ -10,6 +10,9 @@ Small management CLI for deploys.
     python manage.py unset-admin <email>  # revoke it
     python manage.py create-admin <email> <password> ["Name"]  # make a dedicated admin account
 
+Set BOOTSTRAP_ADMIN_EMAIL (env, comma-separated) to auto-promote those accounts
+to admin on every `init-db` — the shell-less way to grant the first prod admin.
+
 On a fresh production database run `init-db` once to create the schema.
 Do NOT run `seed` against real data — it drops tables. `seed-demo` and
 `unseed-demo` are both safe in prod: they only touch the @demo.tryrallypoint.com
@@ -50,11 +53,42 @@ def _ensure_columns():
             print(f"init-db: added missing column {table}.{name}")
 
 
+def _bootstrap_admins():
+    """Promote any email(s) in BOOTSTRAP_ADMIN_EMAIL to admin on startup.
+
+    Lets the first admin be granted on a shell-less host (Render free tier) by
+    setting one env var — no SQL needed. Comma-separated for multiple. Idempotent;
+    only promotes accounts that already exist (sign the account up first). Never
+    fails the deploy: a bad value just logs and is skipped.
+    """
+    import os
+    raw = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "")
+    emails = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    if not emails:
+        return
+    from models import User
+    for email in emails:
+        try:
+            user = User.query.filter(db.func.lower(User.email) == email).first()
+            if not user:
+                print(f"init-db: BOOTSTRAP_ADMIN_EMAIL {email!r} has no account yet — skipped")
+                continue
+            if not user.is_admin or not user.email_verified:
+                user.is_admin = True
+                user.email_verified = True
+                db.session.commit()
+                print(f"init-db: bootstrapped admin {user.email}")
+        except Exception as e:  # noqa: BLE001 — never block startup on this
+            db.session.rollback()
+            print(f"init-db: bootstrap-admin failed for {email!r}: {e}")
+
+
 def init_db():
     app = create_app()
     with app.app_context():
         db.create_all()
         _ensure_columns()
+        _bootstrap_admins()
         print("init-db: tables created (existing tables left untouched).")
 
 
