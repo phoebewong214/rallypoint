@@ -4,6 +4,8 @@ import { TopNav, Icon, ratingLabel } from "../rally-shared";
 import { useAuth } from "../contexts/AuthContext";
 import { authApi } from "../api/auth";
 import { Spinner } from "../components/Skeleton";
+import { NeighborhoodSelect } from "../components/NeighborhoodSelect";
+import { nearestNeighborhood } from "../data/chicagoNeighborhoods";
 
 const NTRP_LEVELS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 
@@ -54,24 +56,6 @@ function LoginPage() {
   const [locating, setLocating] = useState(false);
   const [locStatus, setLocStatus] = useState<"" | "ok" | "denied" | "unsupported" | "error">("");
 
-  // Turn coordinates into a "City, ST" string for the visible Location field.
-  // BigDataCloud's reverse-geocode-client endpoint is free and keyless.
-  const reverseGeocode = async (lat: number, lng: number) => {
-    try {
-      const res = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
-      );
-      if (!res.ok) return;
-      const d = await res.json();
-      const city = d.city || d.locality || d.principalSubdivision || "";
-      const region = d.principalSubdivisionCode?.split("-")?.[1] || d.principalSubdivision || "";
-      const label = [city, region].filter(Boolean).join(", ");
-      if (label) setForm((f) => ({ ...f, location: f.location || label }));
-    } catch {
-      /* keep coords; user can type the city manually */
-    }
-  };
-
   const handleUseMyLocation = () => {
     if (!("geolocation" in navigator)) {
       setLocStatus("unsupported");
@@ -87,10 +71,11 @@ function LoginPage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
-        setForm((f) => ({ ...f, lat: latitude, lng: longitude }));
+        // Snap to the nearest Chicago neighborhood; keep the precise GPS coords.
+        const n = nearestNeighborhood(latitude, longitude);
+        setForm((f) => ({ ...f, lat: latitude, lng: longitude, location: n.name }));
         setLocStatus("ok");
         setLocating(false);
-        reverseGeocode(latitude, longitude);
       },
       (err) => {
         setLocStatus(err.code === err.PERMISSION_DENIED ? "denied" : "error");
@@ -391,19 +376,11 @@ function LoginPage() {
                   </div>
 
                   <div className="field">
-                    <label className="field-label" htmlFor="location"><Icon name="pin" size={13} /> Location</label>
-                    <div className="input-with-icon">
-                      <span className="leading"><Icon name="pin" size={16} /></span>
-                      <input
-                        id="location"
-                        name="location"
-                        autoComplete="address-level2"
-                        className="input"
-                        placeholder="Berkeley, CA"
-                        value={form.location}
-                        onChange={set("location")}
-                      />
-                    </div>
+                    <label className="field-label"><Icon name="pin" size={13} /> Neighborhood (Chicago)</label>
+                    <NeighborhoodSelect
+                      value={form.location || null}
+                      onChange={(n) => setForm((f) => ({ ...f, location: n?.name ?? "", lat: n?.lat, lng: n?.lng }))}
+                    />
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                       <button
                         type="button"
@@ -424,10 +401,10 @@ function LoginPage() {
                         </span>
                       )}
                       {locStatus === "denied" && (
-                        <span className="meta-hint">Permission denied — we'll use the city name.</span>
+                        <span className="meta-hint">Permission denied — just pick your neighborhood.</span>
                       )}
                       {locStatus === "error" && (
-                        <span className="meta-hint">Couldn't get location — we'll use the city name.</span>
+                        <span className="meta-hint">Couldn't get location — just pick your neighborhood.</span>
                       )}
                       {locStatus === "unsupported" && (
                         <span className="meta-hint">Geolocation not supported in this browser.</span>

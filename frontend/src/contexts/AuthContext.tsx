@@ -34,6 +34,8 @@ export interface ProfilePatch {
   name?: string;
   bio?: string;
   location?: string;
+  lat?: number;
+  lng?: number;
   primarySport?: "Tennis" | "Pickleball";
   sportProfiles?: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt?: string; availabilitySummary?: string }[];
   availability?: { dayOfWeek: number; timeBand: string; status: number }[];

@@ -25,6 +25,8 @@ class UpdateProfileSchema(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     bio: Optional[str] = Field(default=None, max_length=1000)
     location: Optional[str] = Field(default=None, max_length=120)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
     primarySport: Optional[str] = Field(default=None, pattern=r"^(Tennis|Pickleball)$")
     sportProfiles: Optional[list[SportProfileInput]] = None
     availability: Optional[list[AvailabilityInput]] = None

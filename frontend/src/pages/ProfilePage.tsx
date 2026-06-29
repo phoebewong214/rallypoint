@@ -8,6 +8,7 @@ import { useCourts } from "../hooks/useCourts";
 import { useSavedPlayers, useToggleSavedPlayer } from "../hooks/useSavedPlayers";
 import { Spinner } from "../components/Skeleton";
 import { CourtPicker } from "../components/CourtPicker";
+import { NeighborhoodSelect } from "../components/NeighborhoodSelect";
 import type { ApiCourt } from "../api/courts";
 import type { Sport } from "../types";
 
@@ -44,6 +45,8 @@ interface EditForm {
   name: string;
   bio: string;
   location: string;
+  lat?: number;
+  lng?: number;
   primarySport: "Tennis" | "Pickleball";
   primaryNtrp: string;
   primaryCourt: string | null;
@@ -57,7 +60,7 @@ interface EditModalProps {
   courtOptions: ApiCourt[];
   onClose: () => void;
   onSave: (patch: {
-    name: string; bio: string; location: string;
+    name: string; bio: string; location: string; lat?: number; lng?: number;
     primarySport: "Tennis" | "Pickleball";
     sportProfiles: { sport: "Tennis" | "Pickleball"; ntrp: string; homeCourt: string }[];
   }) => Promise<void>;
@@ -76,7 +79,7 @@ function EditProfileModal({ initial, courtOptions, onClose, onSave }: EditModalP
       // column when homeCourt is provided (a slug sets it, "" clears it).
       const sportProfiles = [{ sport: form.primarySport, ntrp: form.primaryNtrp, homeCourt: form.primaryCourt ?? "" }];
       if (form.alsoPlay) sportProfiles.push({ sport: otherSport, ntrp: form.secondaryNtrp, homeCourt: form.secondaryCourt ?? "" });
-      await onSave({ name: form.name, bio: form.bio, location: form.location, primarySport: form.primarySport, sportProfiles });
+      await onSave({ name: form.name, bio: form.bio, location: form.location, lat: form.lat, lng: form.lng, primarySport: form.primarySport, sportProfiles });
     } finally {
       setSaving(false);
     }
@@ -95,8 +98,11 @@ function EditProfileModal({ initial, courtOptions, onClose, onSave }: EditModalP
             <input className="input" value={form.name} onChange={set("name")} />
           </div>
           <div className="field">
-            <label className="field-label"><Icon name="pin" size={13} /> Location</label>
-            <input className="input" value={form.location} onChange={set("location")} placeholder="Chicago, IL" />
+            <label className="field-label"><Icon name="pin" size={13} /> Neighborhood (Chicago)</label>
+            <NeighborhoodSelect
+              value={form.location || null}
+              onChange={(n) => setForm((f) => ({ ...f, location: n?.name ?? "", lat: n?.lat, lng: n?.lng }))}
+            />
           </div>
           <div className="field">
             <label className="field-label"><Icon name="trophy" size={13} /> Primary Sport</label>
@@ -644,6 +650,8 @@ function ProfilePage() {
             name: authUser?.name ?? "",
             bio: authUser?.bio ?? "",
             location: authUser?.location ?? "",
+            lat: authUser?.lat ?? undefined,
+            lng: authUser?.lng ?? undefined,
             primarySport: (primarySport as "Tennis" | "Pickleball") ?? "Pickleball",
             primaryNtrp: primaryProfile?.ntrp ?? "3.5",
             primaryCourt: primaryProfile?.homeCourt ?? null,
