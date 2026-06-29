@@ -1,6 +1,8 @@
 import re
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from schemas.profile import AvailabilityInput
 
 # ~3 decimal places ≈ 110 m. We store coordinates at street-block precision so
 # distance matching still works without retaining a user's exact position.
@@ -21,6 +23,7 @@ class SignupSchema(BaseModel):
     location: str | None = Field(default=None, max_length=120)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
+    availability: Optional[list[AvailabilityInput]] = None
 
     @field_validator("name")
     @classmethod

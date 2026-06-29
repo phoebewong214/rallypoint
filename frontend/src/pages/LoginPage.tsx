@@ -6,6 +6,7 @@ import { authApi } from "../api/auth";
 import { Spinner } from "../components/Skeleton";
 import { NeighborhoodSelect } from "../components/NeighborhoodSelect";
 import { nearestNeighborhood } from "../data/chicagoNeighborhoods";
+import { AvailabilityGrid, availMapToList } from "../components/AvailabilityGrid";
 
 const NTRP_LEVELS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 
@@ -42,6 +43,9 @@ function LoginPage() {
     lat: null,
     lng: null,
   });
+  // Preferred-times grid collected during onboarding (cell key = "BAND-day").
+  const [availMap, setAvailMap] = useState<Record<string, number>>({});
+  const cycleAvail = (key: string) => setAvailMap((m) => ({ ...m, [key]: ((m[key] ?? 0) + 1) % 3 }));
   // Updating a field also clears any error attached to it.
   const set = (k: string) => (e: any) => {
     const value = e?.target?.value ?? e;
@@ -126,6 +130,7 @@ function LoginPage() {
         return;
       }
       if (isSignup) {
+        const availability = availMapToList(availMap);
         await signup({
           name: form.name,
           email: form.email,
@@ -135,6 +140,7 @@ function LoginPage() {
           location: form.location || undefined,
           lat: form.lat ?? undefined,
           lng: form.lng ?? undefined,
+          availability: availability.length ? availability : undefined,
         });
       } else {
         await login(form.email, form.password);
@@ -412,6 +418,14 @@ function LoginPage() {
                     </div>
                     <span className="meta-hint">
                       Needed for distance-based partner matching. We never share your exact coordinates.
+                    </span>
+                  </div>
+
+                  <div className="field">
+                    <label className="field-label"><Icon name="clock" size={13} /> Preferred times</label>
+                    <AvailabilityGrid value={availMap} onCycle={cycleAvail} />
+                    <span className="meta-hint">
+                      Tap a cell once for "maybe", twice for "available" — we match you with partners free when you are. You can change it anytime.
                     </span>
                   </div>
                 </>

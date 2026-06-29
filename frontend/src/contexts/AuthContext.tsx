@@ -50,6 +50,7 @@ export interface SignupInput {
   location?: string;
   lat?: number;
   lng?: number;
+  availability?: { dayOfWeek: number; timeBand: string; status: number }[];
 }
 
 const AuthContext = createContext<AuthState | null>(null);
