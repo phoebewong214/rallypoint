@@ -674,7 +674,7 @@ function FindPartnerPage() {
     setRequestTarget(visiblePlayers.find((p) => p.id === id) ?? null);
   };
 
-  const confirmRequest = (startISO: string, endISO: string | null, note?: string) => {
+  const confirmRequest = (startISO: string, endISO: string | null, note?: string, court?: string | null) => {
     const target = requestTarget;
     if (!target) return;
     if (dataSource !== "live") {
@@ -685,7 +685,7 @@ function FindPartnerPage() {
       return;
     }
     createInvite.mutate(
-      { inviteeId: target.id, sport: applied.sport, startAt: startISO, endAt: endISO, note, court: courtSlug },
+      { inviteeId: target.id, sport: applied.sport, startAt: startISO, endAt: endISO, note, court: court ?? courtSlug ?? undefined },
       {
         onSuccess: () => {
           setRequested((prev) => new Set(prev).add(target.id));
@@ -891,6 +891,9 @@ function FindPartnerPage() {
           subtitle={`${applied.sport}${courtCtx ? ` · at ${courtCtx}` : ""} · offer a specific time or a window`}
           submitLabel="Send invite"
           allowWindow
+          allowCourt
+          courtOptions={courtsData?.courts ?? []}
+          defaultCourt={courtSlug ?? null}
           busy={createInvite.isPending}
           onSubmit={confirmRequest}
           onClose={() => setRequestTarget(null)}

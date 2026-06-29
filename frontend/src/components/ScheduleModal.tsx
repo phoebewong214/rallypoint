@@ -2,6 +2,8 @@ import React, { useRef, useState } from "react";
 import { Icon } from "../rally-shared";
 import { Spinner } from "./Skeleton";
 import { Modal } from "./Modal";
+import { CourtPicker } from "./CourtPicker";
+import type { ApiCourt } from "../api/courts";
 
 /* Pick a time for a game (+ optional note). Used three ways:
    - Find Partner: propose a SPECIFIC time OR an open WINDOW (allowWindow).
@@ -33,6 +35,9 @@ export function ScheduleModal({
   allowWindow = false,
   minISO,
   maxISO,
+  allowCourt = false,
+  courtOptions = [],
+  defaultCourt,
   onSubmit,
   onClose,
 }: {
@@ -46,7 +51,11 @@ export function ScheduleModal({
   // Constrain the pickable range (e.g. proposing a time inside an offered window).
   minISO?: string | null;
   maxISO?: string | null;
-  onSubmit: (startISO: string, endISO: string | null, note?: string) => void;
+  // Show a court picker (Find Partner invites) — onSubmit gets the court slug.
+  allowCourt?: boolean;
+  courtOptions?: ApiCourt[];
+  defaultCourt?: string | null;
+  onSubmit: (startISO: string, endISO: string | null, note?: string, court?: string | null) => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<"specific" | "window">("specific");
@@ -58,6 +67,7 @@ export function ScheduleModal({
     return toLocalInput(s);
   });
   const [note, setNote] = useState("");
+  const [court, setCourt] = useState<string | null>(defaultCourt ?? null);
   // Lower bound is the later of "now" and any caller-supplied minimum.
   const now = toLocalInput(new Date());
   const minWhen = minISO ? toLocalInput(new Date(minISO)) : now;
@@ -71,7 +81,7 @@ export function ScheduleModal({
     if (!start || windowInvalid) return;
     const startISO = new Date(start).toISOString();
     const endISO = mode === "window" ? new Date(end).toISOString() : null;
-    onSubmit(startISO, endISO, note.trim() || undefined);
+    onSubmit(startISO, endISO, note.trim() || undefined, allowCourt ? court : undefined);
   };
 
   const tabBtn = (m: "specific" | "window", label: string, icon: any) => (
@@ -149,6 +159,13 @@ export function ScheduleModal({
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-dim)" }}>
               They'll pick an exact time inside this window.
             </p>
+          </div>
+        )}
+
+        {allowCourt && (
+          <div className="field">
+            <label className="field-label"><Icon name="pin" size={13} /> Court (optional)</label>
+            <CourtPicker options={courtOptions} value={court} onChange={setCourt} placeholder="Pick a court" />
           </div>
         )}
 
