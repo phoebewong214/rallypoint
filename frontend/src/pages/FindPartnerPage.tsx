@@ -460,8 +460,8 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
       <PrefTimesMini slots={player.availabilitySlots} />
 
       <div className="match-box" title="Based on skill, distance, schedule overlap, and home court">
-        <div className={"match-tier " + (player.matchTier ?? "good")}>
-          <Icon name="sparkles" size={13} stroke={2.4} /> {TIER_LABEL[player.matchTier ?? "good"]}
+        <div className={"match-tier " + (player.matchTier ?? "good")} title={TIER_LABEL[player.matchTier ?? "good"]}>
+          <Icon name="sparkles" size={13} stroke={2.4} /> {player.matchScore}% match
         </div>
         {player.matchReasons && player.matchReasons.length > 0 ? (
           <div className="match-chips">
