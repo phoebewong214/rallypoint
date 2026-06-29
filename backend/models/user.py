@@ -18,6 +18,10 @@ class User(db.Model):
     # issued against; require_auth rejects any token whose `tv` no longer matches.
     token_version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
     email_verified = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    # Grants access to the /admin dashboard + /api/admin/* endpoints. Set manually
+    # in the DB (or via `python manage.py set-admin <email>`); never self-serviceable
+    # through the API.
+    is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     name = db.Column(db.String(120), nullable=False)
     handle = db.Column(db.String(80), unique=True, nullable=False)
     location = db.Column(db.String(120))
@@ -80,6 +84,7 @@ class User(db.Model):
         if with_email:
             out["email"] = self.email
             out["emailVerified"] = self.email_verified
+            out["isAdmin"] = self.is_admin
         return out
 
 

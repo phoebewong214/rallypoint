@@ -51,3 +51,7 @@ services:
         sync: false
       - key: SMTP_FROM             # RallyPoint <no-reply@yourdomain.com>
         sync: false
+      - key: SUPPORT_ADMIN_EMAIL   # where "talk to a human" support requests are emailed
+        value: admin@tryrallypoint.com
+      - key: OPENAI_API_KEY        # optional — enables AI match reasons + AI support replies; blank = heuristic/escalation only
+        sync: false

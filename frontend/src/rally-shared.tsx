@@ -160,6 +160,11 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
   const { data: sessionsData } = useSessions(!!user);
   const requestCount = (sessionsData?.sessions ?? []).filter((s) => s.bucket === "requests").length;
 
+  // Admins get an extra "Admin" entry; everyone else sees the standard links.
+  const navLinks: NavLinkDef[] = user?.isAdmin
+    ? [...NAV_LINKS, { id: "admin", label: "Admin", to: "/admin" }]
+    : NAV_LINKS;
+
   // Mobile hamburger menu — collapses nav links + user controls into a drawer.
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -182,7 +187,7 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
         </Link>
         {!hideLinks && (
           <div className="nav-links">
-            {NAV_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <NavLink
                 key={l.id}
                 to={l.to}
@@ -261,7 +266,7 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
           <div className="nav-drawer" role="dialog" aria-label="Navigation menu">
             {!hideLinks && (
               <div className="nav-drawer-links">
-                {NAV_LINKS.map((l) => (
+                {navLinks.map((l) => (
                   <NavLink
                     key={l.id}
                     to={l.to}

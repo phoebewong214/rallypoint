@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { WakeBanner } from "./components/WakeBanner";
+import { SupportWidget } from "./components/SupportWidget";
 
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -17,6 +18,8 @@ import SessionsPage from "./pages/SessionsPage";
 // page needs — keeping it out of the main bundle.
 const CourtsPage = React.lazy(() => import("./pages/CourtsPage"));
 const CourtDetailPage = React.lazy(() => import("./pages/CourtDetailPage"));
+// Admin-only — keep its bundle out of every other user's download.
+const AdminPage = React.lazy(() => import("./pages/AdminPage"));
 
 /* Redirect logged-in users away from the login page. */
 const PublicOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -26,11 +29,22 @@ const PublicOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+/* Gate /admin behind the is_admin flag. Non-admins (and logged-out users) are
+   bounced; the backend independently enforces this, so this is just UX. */
+const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) return null;
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!user?.isAdmin) return <Navigate to="/find" replace />;
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <WakeBanner />
+        <SupportWidget />
         <Routes>
           <Route path="/" element={<PublicOnly><LoginPage /></PublicOnly>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -64,6 +78,16 @@ function App() {
                   <CourtDetailPage />
                 </Suspense>
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <AdminOnly>
+                <Suspense fallback={<div className="page" style={{ minHeight: "60vh" }} />}>
+                  <AdminPage />
+                </Suspense>
+              </AdminOnly>
             }
           />
           {/* /schedule folded into the Profile page's Schedule tab; keep old links working. */}
