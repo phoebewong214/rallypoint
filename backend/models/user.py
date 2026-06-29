@@ -24,6 +24,9 @@ class User(db.Model):
     lat = db.Column(db.Float)   # latitude for distance calculations
     lng = db.Column(db.Float)   # longitude for distance calculations
     bio = db.Column(db.Text)
+    # JSON-encoded semantic vector of `bio` (OpenAI embedding); null when no bio
+    # or no OPENAI_API_KEY. Drives the "similar playing style" match signal.
+    bio_embedding = db.Column(db.Text)
     primary_sport = db.Column(db.String(20))  # "Tennis" | "Pickleball"
     avatar_color = db.Column(db.String(120))  # CSS gradient string
     avatar_fg = db.Column(db.String(20))

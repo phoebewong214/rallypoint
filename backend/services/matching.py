@@ -17,9 +17,12 @@ Tier: great >= 70, good >= 45, else worth-a-try.
 /api/ai/match-reason when OPENAI_API_KEY is set — it never affects the score.
 """
 from __future__ import annotations
+import json
 import math
 import os
 from typing import TYPE_CHECKING, Optional
+
+from services.embeddings import cosine
 
 if TYPE_CHECKING:
     from models import User  # pragma: no cover
@@ -102,6 +105,21 @@ def _court_points(vp, cp) -> tuple[int, Optional[str]]:
     return 0, None
 
 
+def _semantic_points(viewer: "User", cand: "User") -> tuple[int, Optional[str]]:
+    """Cosine similarity of the two bios' embeddings → "similar playing style".
+    The genuine-AI signal; skipped when either side has no embedding (no bio or
+    no OPENAI_API_KEY), so it only ever adds information."""
+    if not viewer.bio_embedding or not cand.bio_embedding:
+        return 0, None
+    try:
+        sim = cosine(json.loads(viewer.bio_embedding), json.loads(cand.bio_embedding))
+    except (ValueError, TypeError):
+        return 0, None
+    frac = max(0.0, min(1.0, (sim - 0.45) / 0.30))  # 0.45 → 0, 0.75+ → full
+    pts = round(15 * frac)
+    return pts, ("Similar playing style" if pts >= 6 else None)
+
+
 def score_and_reason(viewer: "User", cand: "User", sport: str) -> dict:
     """Return {score, tier, reasons, summary, distance} for a viewer ↔ candidate
     match. `reasons` are the chips the UI shows; `summary` is a one-line fallback;
@@ -120,6 +138,7 @@ def score_and_reason(viewer: "User", cand: "User", sport: str) -> dict:
         _proximity_points(distance, viewer, cand),
         _schedule_points(viewer, cand),
         _court_points(vp, cp),
+        _semantic_points(viewer, cand),
     ]
     score = sum(pts for pts, _ in signals)
     if viewer.primary_sport and viewer.primary_sport == cand.primary_sport:
