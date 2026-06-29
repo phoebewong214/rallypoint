@@ -13,6 +13,7 @@ export interface SignupBody extends LoginInput {
   location?: string;
   lat?: number;
   lng?: number;
+  availability?: { dayOfWeek: number; timeBand: string; status: number }[];
 }
 
 export interface AuthResponse {

@@ -116,6 +116,11 @@ def signup():
     # Seed the profile for their chosen sport so they show up in matching and
     # their NTRP isn't discarded. Cascades with the user on commit.
     user.sport_profiles.append(SportProfile(sport=data.sport, ntrp=data.ntrp))
+    # Seed preferred times from onboarding (only set cells, status > 0).
+    for slot in (data.availability or []):
+        if slot.status > 0:
+            user.availability.append(AvailabilitySlot(
+                day_of_week=slot.dayOfWeek, time_band=slot.timeBand, status=slot.status))
     db.session.add(user)
     try:
         db.session.commit()

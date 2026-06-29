@@ -93,6 +93,21 @@ def test_home_court_set_and_clear(client):
     assert prof2["homeCourt"] is None and prof2["homeCourtName"] is None
 
 
+def test_signup_seeds_availability(client):
+    r = client.post("/api/auth/signup", json={
+        "email": "onb@rally.app", "password": "rally1234", "name": "Onb",
+        "sport": "Pickleball", "ntrp": "3.5",
+        "availability": [
+            {"dayOfWeek": 1, "timeBand": "EVE", "status": 2},
+            {"dayOfWeek": 3, "timeBand": "MORN", "status": 1},
+            {"dayOfWeek": 0, "timeBand": "AFT", "status": 0},  # 0 → not stored
+        ],
+    })
+    assert r.status_code == 201, r.get_json()
+    cells = {(a["dayOfWeek"], a["timeBand"]): a["status"] for a in r.get_json()["user"]["availability"]}
+    assert cells == {(1, "EVE"): 2, (3, "MORN"): 1}
+
+
 def test_set_and_replace_availability(client):
     tok, _ = _signup(client, "avail@rally.app")
     h = _h(tok)
