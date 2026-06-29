@@ -13,6 +13,8 @@ from .sessions import CreateSessionSchema, RescheduleSessionSchema
 from .appointments import CreateAppointmentSchema, CheckInSchema
 from .ai import MatchReasonSchema
 from .profile import UpdateProfileSchema
+from .admin import AdminUpdateUserSchema
+from .support import SupportChatSchema, SupportEscalateSchema
 
 __all__ = [
     "LoginSchema",
@@ -26,4 +28,7 @@ __all__ = [
     "CheckInSchema",
     "MatchReasonSchema",
     "UpdateProfileSchema",
+    "AdminUpdateUserSchema",
+    "SupportChatSchema",
+    "SupportEscalateSchema",
 ]

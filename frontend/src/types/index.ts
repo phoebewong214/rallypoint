@@ -29,6 +29,7 @@ export interface User {
   initials: string;
   email?: string;
   emailVerified?: boolean;
+  isAdmin?: boolean;
   handle?: string;
   ntrp?: NTRP;
   primarySport?: Sport;
@@ -132,4 +133,4 @@ export type IconName =
   | "moon"
   | "menu";
 
-export type NavId = "find" | "matches" | "courts";
+export type NavId = "find" | "matches" | "courts" | "admin";

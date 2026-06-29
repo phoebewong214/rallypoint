@@ -55,6 +55,22 @@ def require_auth(fn):
     return wrapper
 
 
+def require_admin(fn):
+    """Like @require_auth, but additionally requires the user to be an admin.
+
+    Layers on top of require_auth so it inherits the same token/CSRF/version
+    checks, then rejects non-admins with 403. Admin status is set out-of-band
+    (DB / `manage.py set-admin`) and is never grantable through the API.
+    """
+    @wraps(fn)
+    def inner(*args, **kwargs):
+        if not getattr(g.current_user, "is_admin", False):
+            return jsonify({"error": "admin access required"}), 403
+        return fn(*args, **kwargs)
+
+    return require_auth(inner)
+
+
 def current_user():
     """Convenience accessor for use inside @require_auth-protected handlers."""
     return g.current_user

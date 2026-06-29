@@ -32,6 +32,10 @@ class Config:
     ]
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+    # Where "talk to a human" support escalations are emailed. Must be an inbox
+    # someone actually monitors — set up receiving/forwarding for this address.
+    SUPPORT_ADMIN_EMAIL = os.environ.get("SUPPORT_ADMIN_EMAIL", "admin@tryrallypoint.com")
+
     # Public base URL of the SPA — used to build links inside transactional
     # emails (verification, password reset).
     APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:5173")
