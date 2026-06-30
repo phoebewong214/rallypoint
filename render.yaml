@@ -51,7 +51,9 @@ services:
         sync: false
       - key: SMTP_FROM             # RallyPoint <no-reply@yourdomain.com>
         sync: false
-      - key: SUPPORT_ADMIN_EMAIL   # where "talk to a human" support requests are emailed
-        value: admin@tryrallypoint.com
+      - key: SUPPORT_ADMIN_EMAIL   # where "talk to a human" support requests are emailed (use an inbox you read)
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL # optional — email(s) auto-promoted to admin on deploy (comma-separated); grants the first admin without a shell
+        sync: false
       - key: OPENAI_API_KEY        # optional — enables AI match reasons + AI support replies; blank = heuristic/escalation only
         sync: false
