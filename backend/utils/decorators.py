@@ -49,6 +49,9 @@ def require_auth(fn):
         # (logout-all / password change / pre-versioning tokens).
         if claims.token_version != user.token_version:
             return jsonify({"error": "session expired, please sign in again"}), 401
+        # Suspended accounts are locked out of every authenticated endpoint.
+        if not user.is_active:
+            return jsonify({"error": "This account has been suspended."}), 403
         g.current_user = user
         return fn(*args, **kwargs)
 

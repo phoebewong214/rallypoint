@@ -22,6 +22,10 @@ class User(db.Model):
     # in the DB (or via `python manage.py set-admin <email>`); never self-serviceable
     # through the API.
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    # Trust & safety: a suspended (is_active=False) account is locked out of every
+    # authenticated endpoint by require_auth and is hidden from partner matching.
+    # Toggled by admins only (support desk / report review); never self-serviceable.
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
     name = db.Column(db.String(120), nullable=False)
     handle = db.Column(db.String(80), unique=True, nullable=False)
     location = db.Column(db.String(120))
@@ -52,6 +56,16 @@ class User(db.Model):
     def revoke_tokens(self) -> None:
         """Invalidate every JWT previously issued to this user."""
         self.token_version = (self.token_version or 1) + 1
+
+    def suspend(self) -> None:
+        """Lock the account: block every authenticated request and force a logout
+        of any live session by revoking outstanding tokens."""
+        self.is_active = False
+        self.revoke_tokens()
+
+    def reactivate(self) -> None:
+        """Lift a suspension. Tokens stay revoked, so the user must sign in again."""
+        self.is_active = True
 
     @property
     def initials(self) -> str:
@@ -85,6 +99,7 @@ class User(db.Model):
             out["email"] = self.email
             out["emailVerified"] = self.email_verified
             out["isAdmin"] = self.is_admin
+            out["isActive"] = self.is_active
         return out
 
 

@@ -24,7 +24,28 @@ function toQS(filters: PlayerFilters): string {
   return params.length ? "?" + params.join("&") : "";
 }
 
+export type ReportReason =
+  | "harassment"
+  | "no_show"
+  | "fake_profile"
+  | "inappropriate"
+  | "safety"
+  | "other";
+
+/** Reason options for the report modal — value matches the backend enum. */
+export const REPORT_REASON_OPTIONS: { value: ReportReason; label: string }[] = [
+  { value: "harassment", label: "Harassment or abusive messages" },
+  { value: "no_show", label: "No-show / didn't honor the game" },
+  { value: "fake_profile", label: "Fake or impersonating profile" },
+  { value: "inappropriate", label: "Inappropriate profile content" },
+  { value: "safety", label: "Safety concern" },
+  { value: "other", label: "Something else" },
+];
+
 export const playersApi = {
   list: (filters: PlayerFilters = {}) =>
     api<PlayersResponse>("/players" + toQS(filters)),
+
+  report: (pid: number | string, body: { reason: ReportReason; details?: string }) =>
+    api<{ ok: true }>(`/players/${pid}/report`, { method: "POST", body }),
 };
