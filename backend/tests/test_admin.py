@@ -149,3 +149,21 @@ def test_admin_cannot_grant_admin_via_api(app, client):
     r = client.patch(f"/api/admin/users/{uid}", headers=h, json={"isAdmin": True, "is_admin": True})
     assert r.status_code == 200
     assert r.get_json()["user"]["isAdmin"] is False
+
+
+# ----- overview (dashboard home) -----
+
+def test_overview_returns_recent_activity(app, client):
+    h = _admin_client(app, client)
+    _signup(client, "newbie@rally.app")
+    r = client.get("/api/admin/overview", headers=h)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert any(u["email"] == "newbie@rally.app" for u in body["recentSignups"])
+    assert len(body["signupSeries"]) == 14
+    assert "recentInvites" in body
+
+
+def test_overview_requires_admin(client):
+    tok, _ = _signup(client, "notadmin@rally.app")
+    assert client.get("/api/admin/overview", headers=_h(tok)).status_code == 403

@@ -100,7 +100,7 @@ def list_courts():
     sport = request.args.get("sport")
     q = (request.args.get("q") or "").strip().lower()
 
-    rows = db.session.query(Court).all()
+    rows = db.session.query(Court).filter(Court.is_active.is_(True)).all()
     fav_ids = {f.court_id for f in CourtFavorite.query.filter_by(user_id=viewer.id).all()}
     regulars = _regulars_by_court(sport)
     upcoming = _upcoming_by_court()

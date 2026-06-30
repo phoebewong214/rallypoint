@@ -9,6 +9,7 @@ import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useSessions } from "../hooks/useSessions";
 import { useCreateInvite, useInvites } from "../hooks/useInvites";
 import { ScheduleModal } from "../components/ScheduleModal";
+import { ReportPlayerModal } from "../components/ReportPlayerModal";
 import { CourtMultiSelect } from "../components/CourtMultiSelect";
 import { TimeBandMultiSelect } from "../components/TimeBandMultiSelect";
 import { useToast } from "../contexts/ToastContext";
@@ -409,7 +410,7 @@ function PrefTimesMini({ slots }: { slots?: { dayOfWeek: number; timeBand: strin
   );
 }
 
-function PlayerCard({ player, requested, saved, onRequest, onSave }) {
+function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
   return (
     <article className="card">
       <div className="card-top">
@@ -494,6 +495,14 @@ function PlayerCard({ player, requested, saved, onRequest, onSave }) {
           onClick={() => onSave(player.id)}
         >
           <Icon name="bookmark" size={16} />
+        </button>
+        <button
+          className="btn-icon"
+          aria-label={`Report ${player.name}`}
+          title={`Report ${player.name}`}
+          onClick={() => onReport(player)}
+        >
+          <Icon name="flag" size={16} />
         </button>
       </div>
     </article>
@@ -664,6 +673,7 @@ function FindPartnerPage() {
   // Clicking "Request Game" opens the scheduling modal for that player so the
   // user picks a time (+ note) instead of a silent default.
   const [requestTarget, setRequestTarget] = useState<any | null>(null);
+  const [reportTarget, setReportTarget] = useState<any | null>(null);
   const handleRequest = (id: number) => {
     // Never let a request start against sample data — it would never reach a real
     // player. (Demo data only appears in dev / when the server is unreachable.)
@@ -879,6 +889,10 @@ function FindPartnerPage() {
                   if (dataSource !== "live") { show("Connect to save players", "info"); return; }
                   toggleSaved.mutate({ id, saved: !p.saved });
                 }}
+                onReport={(player: any) => {
+                  if (dataSource !== "live") { show("Connect to report players", "info"); return; }
+                  setReportTarget(player);
+                }}
               />
             ))}
           </div>
@@ -897,6 +911,14 @@ function FindPartnerPage() {
           busy={createInvite.isPending}
           onSubmit={confirmRequest}
           onClose={() => setRequestTarget(null)}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportPlayerModal
+          playerId={reportTarget.id}
+          playerName={reportTarget.name}
+          onClose={() => setReportTarget(null)}
         />
       )}
     </>

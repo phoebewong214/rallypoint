@@ -79,9 +79,14 @@ def test_escalate_emails_support_inbox(client, monkeypatch):
     assert "Conversation so far" in sent["body"]  # history included
 
 
-def test_escalate_502_on_email_failure(client, monkeypatch):
+def test_escalate_persists_even_if_email_fails(client, monkeypatch):
+    # Email delivery failing must NOT lose the message: the ticket is saved and
+    # the user is told it was received (emailed=False flags the notify failure).
     monkeypatch.setattr(support_routes, "send_email", lambda *a, **k: False)
     h = _signup(client, "fail@rally.app")
     r = client.post("/api/support/escalate", headers=h, json={"message": "help"})
-    assert r.status_code == 502
-    assert r.get_json()["ok"] is False
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True and body["emailed"] is False
+    from models import SupportTicket
+    assert SupportTicket.query.filter_by(id=body["ticketId"]).first().message == "help"

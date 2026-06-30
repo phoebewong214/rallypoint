@@ -131,6 +131,7 @@ export type IconName =
   | "bell"
   | "sun"
   | "moon"
-  | "menu";
+  | "menu"
+  | "flag";
 
 export type NavId = "find" | "matches" | "courts" | "admin";

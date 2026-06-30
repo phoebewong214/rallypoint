@@ -33,6 +33,10 @@ _ENSURE_COLUMNS = {
     "users": {
         "bio_embedding": "TEXT",
         "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+    },
+    "courts": {
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
 }
 

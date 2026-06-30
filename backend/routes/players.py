@@ -13,9 +13,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import User, SportProfile, Court, SavedPlayer, AvailabilitySlot
+from models import User, SportProfile, Court, SavedPlayer, AvailabilitySlot, UserReport
+from schemas import CreateReportSchema
 from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
+from utils.validate import parse_json
 
 players_bp = Blueprint("players", __name__)
 
@@ -69,6 +71,7 @@ def list_players():
         .options(selectinload(User.sport_profiles), selectinload(User.availability))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
+        .filter(User.is_active.is_(True))  # suspended accounts never surface as partners
         .filter(SportProfile.sport == sport)
     )
     if court_slugs:
@@ -187,3 +190,54 @@ def unsave_player(pid: int):
     SavedPlayer.query.filter_by(user_id=viewer.id, player_id=pid).delete()
     db.session.commit()
     return jsonify({"id": pid, "saved": False})
+
+
+@players_bp.post("/<int:pid>/report")
+@require_auth
+def report_player(pid: int):
+    """
+    File a trust & safety report against another player. Lands in the admin
+    review queue (GET /api/admin/reports).
+    ---
+    tags: [Players]
+    security:
+      - Bearer: []
+    parameters:
+      - {in: path, name: pid, type: integer, required: true}
+      - in: body
+        name: body
+        schema:
+          type: object
+          required: [reason]
+          properties:
+            reason:  {type: string, enum: [harassment, no_show, fake_profile, inappropriate, safety, other]}
+            details: {type: string}
+    responses:
+      201: {description: Report filed}
+      400: {description: Can't report yourself}
+      404: {description: No such player}
+      422: {description: Validation failed}
+    """
+    viewer = current_user()
+    if pid == viewer.id:
+        return jsonify({"error": "You can't report yourself"}), 400
+    if not User.query.get(pid):
+        return jsonify({"error": "That player no longer exists"}), 404
+
+    data = parse_json(CreateReportSchema)
+
+    # Collapse a reporter's repeat reports against the same player while one is
+    # still open, so a single person can't flood the queue — keep the latest.
+    existing = UserReport.query.filter_by(
+        reporter_id=viewer.id, reported_id=pid, status="open"
+    ).first()
+    if existing:
+        existing.reason = data.reason
+        existing.details = data.details
+    else:
+        db.session.add(UserReport(
+            reporter_id=viewer.id, reported_id=pid,
+            reason=data.reason, details=data.details,
+        ))
+    db.session.commit()
+    return jsonify({"ok": True}), 201

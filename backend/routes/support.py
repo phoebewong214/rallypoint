@@ -6,8 +6,12 @@ POST /api/support/chat       ask the AI support assistant (falls back to a
 POST /api/support/escalate   "talk to a human" → emails the support inbox
                              (SUPPORT_ADMIN_EMAIL) with the user + their message
 """
+import json
+
 from flask import Blueprint, jsonify, current_app
 
+from extensions import db
+from models import SupportTicket
 from schemas import SupportChatSchema, SupportEscalateSchema
 from services.support import answer_support
 from services.email import send_email
@@ -100,32 +104,43 @@ def escalate():
                   role:    {type: string, enum: [user, assistant]}
                   content: {type: string}
     responses:
-      200: {description: Message sent (or queued)}
+      200: {description: Ticket created; `emailed` flags whether the inbox notification went out}
       401: {description: Missing/invalid token}
       422: {description: Validation failed}
-      502: {description: Email delivery failed}
     """
     data = parse_json(SupportEscalateSchema)
     user = current_user()
-    to = current_app.config["SUPPORT_ADMIN_EMAIL"]
 
+    # Persist the ticket FIRST so the message is never lost, even if the email
+    # notification below fails. This is the source of truth for the admin desk.
+    history = [{"role": t.role, "content": t.content.strip()} for t in (data.history or [])]
+    ticket = SupportTicket(
+        user_id=user.id,
+        message=data.message.strip(),
+        history_json=json.dumps(history) if history else None,
+    )
+    db.session.add(ticket)
+    db.session.commit()
+
+    # Best-effort notification to the human support inbox (on top of the queue).
+    to = current_app.config["SUPPORT_ADMIN_EMAIL"]
     lines = [
         f"Support request from {user.name} ({user.handle})",
         f"User email: {user.email}",
         f"User ID: {user.id}",
+        f"Ticket #{ticket.id} — review at /admin (Support tab)",
         "",
         "Message:",
-        data.message.strip(),
+        ticket.message,
     ]
-    if data.history:
+    if history:
         lines += ["", "--- Conversation so far ---"]
-        for t in data.history:
-            who = "User" if t.role == "user" else "Assistant"
-            lines.append(f"{who}: {t.content.strip()}")
-    body = "\n".join(lines)
+        for t in history:
+            who = "User" if t["role"] == "user" else "Assistant"
+            lines.append(f"{who}: {t['content']}")
     subject = f"[RallyPoint Support] {user.name} <{user.email}>"
 
-    ok = send_email(to, subject, body)
-    if not ok:
-        return jsonify({"ok": False, "error": "Could not send your message. Please try again."}), 502
-    return jsonify({"ok": True})
+    emailed = bool(send_email(to, subject, "\n".join(lines)))
+    if not emailed:
+        current_app.logger.warning("support escalation #%s saved but email notify failed", ticket.id)
+    return jsonify({"ok": True, "emailed": emailed, "ticketId": ticket.id})
