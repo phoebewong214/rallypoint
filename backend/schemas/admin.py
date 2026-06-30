@@ -16,6 +16,10 @@ class AdminUpdateUserSchema(BaseModel):
     email: Optional[EmailStr] = None
     handle: Optional[str] = Field(default=None, min_length=2, max_length=80)
     emailVerified: Optional[bool] = None
+    # When true (typically with a changed `email`), mark the address unverified
+    # and re-send the verification email to the new address. Overrides
+    # emailVerified=True if both are sent.
+    resendVerification: Optional[bool] = None
     # Trust & safety: false suspends the account (locks it out + logs it out),
     # true lifts the suspension.
     isActive: Optional[bool] = None

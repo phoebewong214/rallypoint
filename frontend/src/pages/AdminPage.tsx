@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TopNav } from "../rally-shared";
 import { useToast } from "../contexts/ToastContext";
 import { Modal } from "../components/Modal";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Spinner } from "../components/Skeleton";
 import { adminApi } from "../api/admin";
 import type {
@@ -57,25 +58,33 @@ interface EditState {
   email: string;
   handle: string;
   emailVerified: boolean;
+  resendVerification: boolean;
   isActive: boolean;
   location: string;
   primarySport: "Tennis" | "Pickleball";
-  primaryNtrp: string;
+  ratings: Record<string, string>; // sport -> NTRP, for every profile the user has
+  lat: string;
+  lng: string;
   bio: string;
 }
 
 function fromUser(u: AdminUser): EditState {
   const primarySport = (u.primarySport as "Tennis" | "Pickleball") || "Pickleball";
-  const prof = (u.sportProfiles || []).find((p) => p.sport === primarySport);
+  const ratings: Record<string, string> = {};
+  for (const p of u.sportProfiles || []) ratings[p.sport] = p.ntrp;
+  if (!ratings[primarySport]) ratings[primarySport] = "3.5";
   return {
     name: u.name || "",
     email: u.email || "",
     handle: u.handle || "",
     emailVerified: !!u.emailVerified,
+    resendVerification: false,
     isActive: u.isActive !== false, // default active unless explicitly suspended
     location: u.location || "",
     primarySport,
-    primaryNtrp: prof?.ntrp || "3.5",
+    ratings,
+    lat: u.lat != null ? String(u.lat) : "",
+    lng: u.lng != null ? String(u.lng) : "",
     bio: u.bio || "",
   };
 }
@@ -84,33 +93,45 @@ function EditUserModal({
   user,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   user: AdminUser;
   onClose: () => void;
   onSaved: (u: AdminUser) => void;
+  onDeleted: (id: string) => void;
 }) {
   const { show } = useToast();
   const [form, setForm] = useState<EditState>(() => fromUser(user));
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const set = (k: keyof EditState) => (e: any) =>
     setForm((f) => ({ ...f, [k]: e?.target?.type === "checkbox" ? e.target.checked : (e?.target?.value ?? e) }));
+  const setRating = (sport: string) => (e: any) =>
+    setForm((f) => ({ ...f, ratings: { ...f.ratings, [sport]: e.target.value } }));
+
+  const sportsToShow = Object.keys(form.ratings).length
+    ? Object.keys(form.ratings)
+    : [form.primarySport];
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Rebuild the full sportProfiles set so we never drop the user's other
-      // sport: keep every existing profile, update the primary's NTRP, and make
-      // sure a profile exists for the (possibly changed) primary sport.
-      const existing = user.sportProfiles || [];
-      const profiles = existing.map((p) => ({
-        sport: p.sport,
-        ntrp: p.sport === form.primarySport ? form.primaryNtrp : p.ntrp,
-        homeCourt: p.homeCourt ?? undefined,
-        availabilitySummary: p.availability ?? undefined,
-      }));
+      // The sent set is the complete desired list: one profile per sport the
+      // user has, each with its (possibly edited) rating. Always include the
+      // primary sport so it survives the upsert.
+      const profiles = sportsToShow.map((sport) => {
+        const existing = (user.sportProfiles || []).find((p) => p.sport === sport);
+        return {
+          sport: sport as "Tennis" | "Pickleball",
+          ntrp: form.ratings[sport] || existing?.ntrp || "3.5",
+          homeCourt: existing?.homeCourt ?? undefined,
+          availabilitySummary: existing?.availability ?? undefined,
+        };
+      });
       if (!profiles.some((p) => p.sport === form.primarySport)) {
-        profiles.push({ sport: form.primarySport, ntrp: form.primaryNtrp, homeCourt: undefined, availabilitySummary: undefined });
+        profiles.push({ sport: form.primarySport, ntrp: form.ratings[form.primarySport] || "3.5", homeCourt: undefined, availabilitySummary: undefined });
       }
 
       const patch: AdminUserPatch = {
@@ -118,20 +139,36 @@ function EditUserModal({
         email: form.email.trim(),
         handle: form.handle.trim(),
         emailVerified: form.emailVerified,
+        resendVerification: form.resendVerification || undefined,
         isActive: form.isActive,
         location: form.location.trim(),
         primarySport: form.primarySport,
         bio: form.bio,
         sportProfiles: profiles,
+        lat: form.lat.trim() ? Number(form.lat) : undefined,
+        lng: form.lng.trim() ? Number(form.lng) : undefined,
       };
       const { user: updated } = await adminApi.updateUser(user.id, patch);
-      show("User updated", "success");
+      show(form.resendVerification ? "Saved — verification email sent" : "User updated", "success");
       onSaved(updated);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not save changes";
       show(msg, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await adminApi.deleteUser(user.id);
+      show("Account permanently deleted", "success");
+      onDeleted(user.id);
+    } catch (err) {
+      show(err instanceof ApiError ? err.message : "Could not delete account", "error");
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -158,8 +195,12 @@ function EditUserModal({
       </div>
 
       <label className="checkbox-row" style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-        <input type="checkbox" checked={form.emailVerified} onChange={set("emailVerified")} />
+        <input type="checkbox" checked={form.emailVerified} onChange={set("emailVerified")} disabled={form.resendVerification} />
         <span>Email verified</span>
+      </label>
+      <label className="checkbox-row" style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginTop: -6 }}>
+        <input type="checkbox" checked={form.resendVerification} onChange={set("resendVerification")} />
+        <span style={{ fontSize: 13 }}>Re-send verification email to this address (marks it unverified)</span>
       </label>
 
       <div className="field">
@@ -169,17 +210,36 @@ function EditUserModal({
 
       <div style={{ display: "flex", gap: 12 }}>
         <div className="field" style={{ flex: 1 }}>
-          <label className="field-label">Primary sport</label>
-          <select className="input" value={form.primarySport} onChange={set("primarySport")}>
-            <option value="Pickleball">Pickleball</option>
-            <option value="Tennis">Tennis</option>
-          </select>
+          <label className="field-label">Latitude</label>
+          <input className="input" value={form.lat} onChange={set("lat")} placeholder="41.79" />
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label className="field-label">Rating (NTRP/DUPR)</label>
-          <select className="input" value={form.primaryNtrp} onChange={set("primaryNtrp")}>
-            {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <label className="field-label">Longitude</label>
+          <input className="input" value={form.lng} onChange={set("lng")} placeholder="-87.59" />
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="field-label">Primary sport</label>
+        <select className="input" value={form.primarySport} onChange={set("primarySport")}>
+          <option value="Pickleball">Pickleball</option>
+          <option value="Tennis">Tennis</option>
+        </select>
+      </div>
+
+      <div className="field">
+        <label className="field-label">Ratings (NTRP/DUPR)</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {sportsToShow.map((sport) => (
+            <div key={sport} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 90, fontSize: 13, color: "var(--text-dim)" }}>
+                {sport}{sport === form.primarySport ? " ·primary" : ""}
+              </span>
+              <select className="input" style={{ flex: 1 }} value={form.ratings[sport] || "3.5"} onChange={setRating(sport)}>
+                {RATINGS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -216,10 +276,38 @@ function EditUserModal({
         </button>
       </div>
 
+      {/* Danger zone: permanent deletion (distinct from the reversible suspend above). */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
+        <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+          Permanently delete this account and all of their data. Can't be undone.
+        </div>
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          style={{ color: "var(--danger, #dc2626)", borderColor: "var(--danger, #dc2626)", whiteSpace: "nowrap" }}
+          onClick={() => setConfirmDelete(true)}
+        >
+          Delete account
+        </button>
+      </div>
+
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
         <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${user.name}?`}
+          body={`This permanently removes ${user.handle} and all of their profile, games, invites, reports and tickets. This cannot be undone. To temporarily lock the account instead, use Suspend.`}
+          confirmLabel="Delete forever"
+          cancelLabel="Keep account"
+          danger
+          busy={deleting}
+          onConfirm={handleDelete}
+          onClose={() => setConfirmDelete(false)}
+        />
+      )}
     </Modal>
   );
 }
@@ -903,6 +991,13 @@ const AdminPage: React.FC = () => {
     loadStats(); // verified-count etc. may have changed
   };
 
+  const onDeleted = (id: string) => {
+    setUsers((arr) => arr.filter((u) => u.id !== id));
+    setTotal((t) => Math.max(0, t - 1));
+    setEditing(null);
+    loadStats(); // user/verified/admin counts changed
+  };
+
   const statCards = useMemo(() => {
     if (!stats) return null;
     return (
@@ -1028,7 +1123,7 @@ const AdminPage: React.FC = () => {
         )}
       </main>
 
-      {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} onSaved={onSaved} />}
+      {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} onSaved={onSaved} onDeleted={onDeleted} />}
     </>
   );
 };

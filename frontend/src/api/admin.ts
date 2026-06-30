@@ -134,6 +134,7 @@ export interface AdminUserPatch {
   email?: string;
   handle?: string;
   emailVerified?: boolean;
+  resendVerification?: boolean;
   isActive?: boolean;
   bio?: string;
   location?: string;
@@ -161,6 +162,9 @@ export const adminApi = {
 
   updateUser: (id: string | number, patch: AdminUserPatch) =>
     api<{ user: AdminUser }>(`/admin/users/${id}`, { method: "PATCH", body: patch }),
+
+  deleteUser: (id: string | number) =>
+    api<{ ok: true }>(`/admin/users/${id}`, { method: "DELETE" }),
 
   listReports: (status: ReportStatus | "all" = "open") =>
     api<AdminReportList>(`/admin/reports?status=${status}`),
