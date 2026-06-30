@@ -50,11 +50,18 @@ push.
    - `COOKIE_DOMAIN = .yourdomain.com`
    - `SMTP_HOST = smtp.resend.com`, `SMTP_USER = resend`,
      `SMTP_PASSWORD = <re_... key>`, `SMTP_FROM = RallyPoint <no-reply@yourdomain.com>`
+   - **Optional:** `OPENAI_API_KEY = sk-...` — enables the semantic "playing style"
+     embedding signal and the on-demand LLM reason text. Without it, both degrade
+     gracefully (the embedding signal is simply skipped, scores still work).
+   - **Optional:** `BOOTSTRAP_ADMIN_EMAIL = you@yourdomain.com` — grants the first
+     admin account (for the admin dashboard) on signup, without needing a shell.
    (`SECRET_KEY` and `DATABASE_URL` are set automatically.)
-3. After the first deploy, **create the tables**: Render → your service →
-   **Shell** tab → run:
+3. **Tables + courts:** the Procfile release step runs `manage.py init-db` and
+   imports the Chicago courts automatically on deploy. If you ever need to do it
+   by hand, Render → your service → **Shell** tab → run:
    ```
    python manage.py init-db
+   python manage.py import-courts --if-empty
    ```
 4. Confirm it's up: open `https://<your-render-url>/api/health` → `{"status":"ok"}`.
 
@@ -67,6 +74,8 @@ push.
    - **Root Directory:** `frontend`
    - **Framework Preset:** Vite (Build `npm run build`, Output `build`)
    - **Environment Variable:** `VITE_API_URL = https://api.yourdomain.com/api`
+   This variable is required in production. The frontend only falls back to
+   `http://localhost:5050/api` while running Vite in local development.
 3. Deploy.
 
 ---
@@ -100,9 +109,12 @@ push.
   `COOKIE_DOMAIN=.yourdomain.com`, `COOKIE_SECURE=true`.
 - **CORS error in console?** `CORS_ORIGINS` must exactly equal the frontend URL
   (scheme + host, no trailing slash).
+- **Browser tries `localhost:5050` in production?** Vercel is missing
+  `VITE_API_URL`, or it was added after the build. Set it and redeploy.
 - **Emails go to spam / not sent?** Resend domain must be *Verified*; `SMTP_FROM`
   must use that domain.
-- **First request very slow?** Render free tier sleeps; upgrade the plan to keep
-  it warm. Free Postgres also expires (~30 days) — upgrade for real users.
+- **First request very slow?** Render free tier sleeps; a CI keep-warm ping and a
+  non-blocking "server waking up" banner soften this, but upgrade the plan to truly
+  keep it warm. Free Postgres also expires (~30 days) — upgrade for real users.
 - **Never commit secrets.** `.env` is gitignored; real secrets live only in the
   Render/Vercel dashboards.
