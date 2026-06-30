@@ -12,7 +12,7 @@ the DB or `python manage.py set-admin <email>`.
 import json
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from sqlalchemy import or_, func
 
 from extensions import db
@@ -23,8 +23,12 @@ from models import (
     CourtFavorite,
     CourtCheckIn,
     GameInvite,
+    TimeProposal,
     CourtAppointment,
+    AppointmentParticipant,
     Session,
+    SavedPlayer,
+    AIMatchLog,
     UserReport,
     SupportTicket,
 )
@@ -51,6 +55,57 @@ def _admin_user_dict(user: User) -> dict:
     out = user.to_dict(with_email=True)
     out["createdAt"] = user.created_at.isoformat() if user.created_at else None
     return out
+
+
+def _delete_user_cascade(user: User) -> None:
+    """Permanently remove a user and every row that references them, in FK-safe
+    order (Postgres enforces FKs; SQLite dev doesn't, but we stay correct for both).
+    sport_profiles + availability cascade via the ORM relationships on delete."""
+    uid = user.id
+
+    # Appointments: rows where they joined others' games, then games they created.
+    AppointmentParticipant.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    appt_ids = [a.id for a in CourtAppointment.query.filter_by(creator_id=uid).all()]
+    if appt_ids:
+        AppointmentParticipant.query.filter(
+            AppointmentParticipant.appointment_id.in_(appt_ids)
+        ).delete(synchronize_session=False)
+        CourtAppointment.query.filter(CourtAppointment.id.in_(appt_ids)).delete(synchronize_session=False)
+
+    # Lightweight per-user rows.
+    SavedPlayer.query.filter(
+        or_(SavedPlayer.user_id == uid, SavedPlayer.player_id == uid)
+    ).delete(synchronize_session=False)
+    CourtFavorite.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    CourtCheckIn.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    AIMatchLog.query.filter(
+        or_(AIMatchLog.viewer_id == uid, AIMatchLog.candidate_id == uid)
+    ).delete(synchronize_session=False)
+
+    # Invites (+ their time proposals) and any materialized sessions involving them.
+    invite_ids = [
+        i.id for i in GameInvite.query.filter(
+            or_(GameInvite.inviter_id == uid, GameInvite.invitee_id == uid)
+        ).all()
+    ]
+    if invite_ids:
+        TimeProposal.query.filter(TimeProposal.invite_id.in_(invite_ids)).delete(synchronize_session=False)
+        GameInvite.query.filter(GameInvite.id.in_(invite_ids)).delete(synchronize_session=False)
+    Session.query.filter(
+        or_(Session.host_id == uid, Session.guest_id == uid)
+    ).delete(synchronize_session=False)
+
+    # Reports & tickets: drop those by/about them; null them out as a resolver.
+    UserReport.query.filter(
+        or_(UserReport.reporter_id == uid, UserReport.reported_id == uid)
+    ).delete(synchronize_session=False)
+    UserReport.query.filter_by(resolved_by_id=uid).update({"resolved_by_id": None}, synchronize_session=False)
+    SupportTicket.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    SupportTicket.query.filter_by(resolved_by_id=uid).update({"resolved_by_id": None}, synchronize_session=False)
+
+    # Finally the user (cascades sport_profiles + availability via relationships).
+    db.session.delete(user)
+    db.session.commit()
 
 
 @admin_bp.get("/stats")
@@ -185,6 +240,8 @@ def list_users():
       - Bearer: []
     parameters:
       - {in: query, name: q,       type: string,  description: "match name/email/handle"}
+      - {in: query, name: status,  type: string,  enum: [all, verified, unverified, suspended, admin]}
+      - {in: query, name: sport,   type: string,  enum: [Tennis, Pickleball]}
       - {in: query, name: page,    type: integer, default: 1}
       - {in: query, name: perPage, type: integer, default: 25}
     responses:
@@ -206,6 +263,22 @@ def list_users():
             User.email.ilike(like),
             User.handle.ilike(like),
         ))
+
+    # Status filter (verification / suspension / admin).
+    status = (request.args.get("status") or "all").lower()
+    if status == "verified":
+        query = query.filter(User.email_verified.is_(True))
+    elif status == "unverified":
+        query = query.filter(User.email_verified.is_(False))
+    elif status == "suspended":
+        query = query.filter(User.is_active.is_(False))
+    elif status == "admin":
+        query = query.filter(User.is_admin.is_(True))
+
+    # Sport filter: users who have a profile for the given sport.
+    sport = request.args.get("sport")
+    if sport in ("Tennis", "Pickleball"):
+        query = query.filter(User.sport_profiles.any(SportProfile.sport == sport))
 
     total = query.with_entities(func.count(User.id)).scalar() or 0
     rows = (
@@ -303,6 +376,10 @@ def update_user(user_id: int):
         user.handle = data.handle
     if data.emailVerified is not None:
         user.email_verified = data.emailVerified
+    # Resend-verification wins over an explicit emailVerified=True: a fresh email
+    # is unverified until the user clicks the new link.
+    if data.resendVerification:
+        user.email_verified = False
     if data.isActive is not None and data.isActive != user.is_active:
         # Guard against an admin locking themselves out mid-session.
         if not data.isActive and user.id == current_user().id:
@@ -349,7 +426,43 @@ def update_user(user_id: int):
                 user.sport_profiles.remove(prof)
 
     db.session.commit()
+
+    # Best-effort: re-send the verification email to the (possibly new) address.
+    if data.resendVerification:
+        try:
+            from routes.auth import _send_verification
+            _send_verification(user)
+        except Exception as e:  # noqa: BLE001 — never fail the edit on email trouble
+            current_app.logger.warning("admin resend-verification failed for %s: %s", user.id, e)
+
     return jsonify({"user": _admin_user_dict(user)})
+
+
+@admin_bp.delete("/users/<int:user_id>")
+@require_admin
+def delete_user(user_id: int):
+    """
+    Permanently delete a user and all of their data (profile, games, invites,
+    reports, tickets, favorites…). Irreversible. Use suspend for a reversible lock.
+    ---
+    tags: [Admin]
+    security:
+      - Bearer: []
+    parameters:
+      - {in: path, name: user_id, type: integer, required: true}
+    responses:
+      200: {description: Deleted}
+      400: {description: Can't delete your own account}
+      403: {description: Not an admin}
+      404: {description: No such user}
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+    if user.id == current_user().id:
+        return jsonify({"error": "You can't delete your own account"}), 400
+    _delete_user_cascade(user)
+    return jsonify({"ok": True})
 
 
 @admin_bp.get("/reports")

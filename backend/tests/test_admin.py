@@ -167,3 +167,29 @@ def test_overview_returns_recent_activity(app, client):
 def test_overview_requires_admin(client):
     tok, _ = _signup(client, "notadmin@rally.app")
     assert client.get("/api/admin/overview", headers=_h(tok)).status_code == 403
+
+
+# ----- user list filters -----
+
+def test_list_users_status_and_sport_filters(app, client):
+    h = _admin_client(app, client)
+    _, uid = _signup(client, "tennisplayer@rally.app", sport="Tennis", ntrp="4.0")
+    _signup(client, "pickler@rally.app", sport="Pickleball")
+
+    # sport filter
+    r = client.get("/api/admin/users?sport=Tennis", headers=h)
+    emails = {u["email"] for u in r.get_json()["users"]}
+    assert "tennisplayer@rally.app" in emails and "pickler@rally.app" not in emails
+
+    # status: unverified (none are verified yet except admin via _admin_client)
+    unv = client.get("/api/admin/users?status=unverified", headers=h).get_json()
+    assert all(u["emailVerified"] is False for u in unv["users"]) and unv["total"] >= 2
+
+    # status: suspended — suspend one and confirm it filters
+    client.patch(f"/api/admin/users/{uid}", headers=h, json={"isActive": False})
+    susp = client.get("/api/admin/users?status=suspended", headers=h).get_json()
+    assert [u["email"] for u in susp["users"]] == ["tennisplayer@rally.app"]
+
+    # status: admin
+    adm = client.get("/api/admin/users?status=admin", headers=h).get_json()
+    assert all(u["isAdmin"] for u in adm["users"]) and adm["total"] == 1
