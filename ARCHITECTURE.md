@@ -24,14 +24,14 @@ or evaluating it.
 │ created_at       │1       *│ availability_slots│        └─────────────────┘
 └─────────┬────────┘─────────│──────────────────│
           │                  │ id  PK           │         ┌─────────────────┐
-          │                  │ user_id  FK      │         │ feed_posts      │
+          │                  │ user_id  FK      │         │ game_invites    │
           │                  │ day_of_week 0-6  │         │─────────────────│
           │                  │ time_band        │         │ id  PK          │
-          │                  │ status 0|1|2     │         │ author_id  FK   │
-          │                  └──────────────────┘         │ type (enum)     │
-          │                                                │ text            │
-          │1     2*  ┌────────────────────┐               │ match_id  FK    │
-          ├──────────│ sessions           │               │ likes/comments  │
+          │                  │ status 0|1|2     │         │ proposer_id  FK │
+          │                  └──────────────────┘         │ invitee_id  FK  │
+          │                                                │ court_id  FK    │
+          │1     2*  ┌────────────────────┐               │ proposed_at     │
+          ├──────────│ sessions           │               │ phase / status  │
           │          │────────────────────│               │ created_at      │
           │          │ id  PK             │               └─────────────────┘
           │          │ host_id  FK        │
@@ -61,6 +61,14 @@ or evaluating it.
 - `AIMatchLog` has a **unique constraint on `(viewer_id, candidate_id, sport)`**
   so re-running matching updates the row rather than appending. This makes
   the AI verdict stable across page loads.
+- **Newer tables** extend the core: `saved_players` (server-backed player
+  bookmarks), `court_favorites`, `court_appointments` + `appointment_participants`
+  (open games with a waitlist), `court_checkins` (a ~2h "here now" signal), and
+  `game_invites` (the two-phase request / time-negotiation flow). `feed_posts`
+  was removed along with the Community feed.
+- `users.bio_embedding` stores a JSON OpenAI vector of the bio; matching adds a
+  semantic "playing style" signal from the cosine similarity of two bios, and
+  degrades gracefully to nothing when an embedding or API key is missing.
 
 ---
 
@@ -69,7 +77,7 @@ or evaluating it.
 A typical "Find Partner" request:
 
 ```
-Browser (React)                Flask backend                 SQLite
+Browser (React)                Flask backend                 SQLite/Postgres
 ───────────────                ─────────────                 ──────
 usePlayers({sport:"Pickleball",
             ntrpMin:3,
@@ -77,7 +85,8 @@ usePlayers({sport:"Pickleball",
       │
       ▼
 GET /api/players?sport=...
-Authorization: Bearer <jwt>
+Cookie: rp_session
+(or Authorization: Bearer <jwt> for API/test clients)
       │
       └─────────────────────►  @require_auth
                                   │ decode JWT → user_id
@@ -89,9 +98,7 @@ Authorization: Bearer <jwt>
                                   ▼ ────────────────────────► candidates
                                for each candidate:
                                   score_and_reason(viewer, cand)
-                                  upsert AIMatchLog cache
-                                  │
-                                  ▼ ──────────────────────────► commit
+                                  no writes on the hot GET path
                                return JSON
       │
       ◄─────────────────────  { players: [...], count: N }
@@ -124,12 +131,12 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 **Why:** Built-in cache, retry, loading/error states, devtools, mutation patterns. SWR is similar but smaller community for React 19.
 **Rejected:** Redux Toolkit Query (heavier, redundant with TQ in 2025), bare `useEffect + fetch` (every page reinvents loading/error).
 
-### ADR-004: JWT in localStorage (not httpOnly cookies)
+### ADR-004: JWT in an httpOnly cookie + CSRF double-submit (migrated from localStorage)
 
-**Decision:** Store JWT in `localStorage`, send via `Authorization: Bearer`.
-**Why:** Simplest path for a capstone SPA — no CSRF concerns, no cookie domain config across frontend/backend ports.
-**Trade-off:** Vulnerable to XSS exfiltration. Mitigation: short-lived tokens (7 days), CSP headers in production, strict React escaping. Production should migrate to httpOnly cookies + CSRF tokens.
-**Rejected:** httpOnly cookies (more setup), sessions (server state — defeats stateless API).
+**Decision:** Store the JWT in an httpOnly cookie the browser sends automatically (`credentials: "include"`); defend unsafe methods with a double-submit CSRF token — a readable `rp_csrf` cookie echoed in an `X-CSRF-Token` header. JS never holds the token; `localStorage` caches only the non-secret user object for instant first paint.
+**Why:** The original capstone build kept the JWT in `localStorage` (simplest — no CSRF or cookie-domain setup) but that is XSS-exfiltratable. We migrated to the httpOnly-cookie + CSRF approach this ADR originally flagged as the production target.
+**Trade-off:** More setup (cookie domain across frontend/backend, CSRF echo on writes) in exchange for a token unreachable from JavaScript.
+**Superseded:** localStorage JWT + `Authorization: Bearer` (XSS-exfiltratable); also rejected server-side sessions (server state — defeats the stateless API).
 
 ### ADR-005: Pydantic v2 for request validation
 
@@ -143,14 +150,14 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 **Why:** Zero setup for contributors, identical SQLAlchemy ORM code regardless of backend. `psycopg2-binary` is already in `requirements.txt`.
 **Caveat:** SQLite's single-writer lock makes it unsuitable for multi-user concurrency. Switch before any user load.
 
-### ADR-007: Heuristic AI matching with optional LLM upgrade
+### ADR-007: Explainable matching (transparent heuristic + semantic embeddings); optional LLM for wording only
 
-**Decision:** Default scoring is deterministic (NTRP closeness + same primary sport + same city + availability overlap). If `OPENAI_API_KEY` is set, route to `gpt-4o-mini` for the *reason* string.
+**Decision:** `/api/players` produces a transparent score (0-100) from real signals, each emitting a human-readable reason chip: skill closeness (0-45, dominant), court proximity by great-circle distance (0-25, continuous), weekly preferred-times grid overlap (0-20), shared home court (0-15), same primary sport (+5), and a genuine AI signal — semantic "playing style" similarity (0-15) from the cosine of two players' bio embeddings. The score is tiered (great/good/worth-a-try). The served path writes no match logs. A separate, optional `/api/ai/match-reason` endpoint can call `gpt-4o-mini` to rewrite the reason *text only* (cached in `ai_match_logs`); it never affects the score.
 **Why:**
-- Deterministic = testable, cheap, no external dependency.
-- LLM-generated reasons are warmer and more specific, which is the "AI" part users care about visually.
-- Cached in `ai_match_logs` so a re-render doesn't re-bill the API.
-**Rejected:** LLM-only (cost + latency + non-determinism), pure ML (out of scope for capstone).
+- Transparent + auditable: every point maps to a reason chip — no black box, and no fake "AI Match" label.
+- Real AI where it helps: the embedding signal adds genuine semantic matching and degrades gracefully to zero with no bio or API key, so it only ever adds information.
+- The served list stays fast and side-effect free; the LLM is bounded (wording only, cached).
+**Rejected:** LLM-only ranker (cost + latency + hallucinated, unauditable justifications), a fake "AI" badge over a heuristic (removed), pure trained-ML ranker (needs a labeled accept/decline history that does not exist yet — the future option once `ai_match_logs` is wired on the served path).
 
 ### ADR-008: Flask-Limiter on auth routes
 
@@ -158,11 +165,11 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 **Why:** Blocks naive credential brute-force without making legitimate development annoying.
 **Rejected:** No rate limit (insecure), nginx-level limit (couples app to a specific deploy).
 
-### ADR-009: Skip Flask-Migrate for now, use `seed.py` with drop+create
+### ADR-009: Flask-Migrate initialized; production migrations still need a revision history
 
-**Decision:** No migrations during pre-launch iteration; `seed.py` drops and recreates schema.
-**Why:** Schema is changing weekly. Migrations would slow iteration with no benefit when there's no production data to preserve.
-**Trigger to revisit:** First production deploy or any time real user data exists.
+**Decision:** The app initializes Flask-Migrate, but the current deploy bootstrap still uses an idempotent `manage.py init-db` (`db.create_all`) so a free Render database can start without a paid release job. `seed.py` remains dev-only and destructive.
+**Why:** This keeps the capstone deployment simple while data is still disposable.
+**Trigger to revisit:** Before any real user data is treated as durable, create a migrations folder, generate the first revision from current models, and deploy with `flask db upgrade`/a release job instead of schema creation at web startup.
 
 ### ADR-010: Dark mode via CSS variable overrides
 
@@ -181,8 +188,8 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 | XSS | React auto-escapes by default | ✅ |
 | Malformed input → 500 | Pydantic schemas → 422 with details | ✅ |
 | Auth header spoofing (X-User-Id) | Replaced with HS256-signed JWT | ✅ |
-| Token theft via XSS | Short-lived (7-day) tokens; logout on 401 | ⚠️ Better: httpOnly cookies |
-| CSRF | N/A while token is in localStorage (not auto-sent) | ⚠️ Re-eval after cookie migration |
+| Token theft via XSS | JWT in httpOnly cookie — unreachable from JS; logout on 401 | ✅ |
+| CSRF | Double-submit token (`rp_csrf` cookie echoed in `X-CSRF-Token`) on unsafe methods | ✅ |
 | Password storage | werkzeug `generate_password_hash` (scrypt) | ✅ |
 | CORS | Allowlist of origins from `CORS_ORIGINS` env | ✅ |
 | Rate limit storage in-memory | OK for single-instance dev | ⚠️ Use Redis in prod |
@@ -195,14 +202,14 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 - **Frontend prod bundle:** ~250 KB gzipped (React 19 + Router + TQ)
 - **Backend cold start:** ~600ms (Flask + SQLAlchemy)
 - **`/api/players` typical latency:** <50ms for 6 candidates (heuristic path)
-- **`/api/players` with OpenAI:** ~2s × N candidates (sync, **needs Celery for any scale**)
+- **`/api/ai/match-reason` with OpenAI:** ~2s for one on-demand reason; batch/background generation would need a worker queue
 - **DB:** SQLite single-writer; first bottleneck under concurrent load
 
 ---
 
 ## Open questions
 
-1. **Geocoding** — every player's `distance` is hardcoded `"1.0"` in the backend response. Need lat/lng on users + Haversine vs viewer.
-2. **Real-time** — "247 players online" / new session notifications are static. Polling vs WebSocket vs SSE?
-3. **Availability matching** — current heuristic does fuzzy keyword overlap (`"weekends" ∩ "weekend mornings"`). Better: structured comparison of `availability_slots` rows.
-4. **Mobile** — TopNav has 5 links + theme + user pill + logout. Doesn't scale below ~600px. Bottom tab bar?
+1. ~~Structured availability matching~~ **(done)** — matching now scores overlap of the real weekly `availability_slots` grid, not free-text summaries.
+2. **Real-time presence** — "online now" and new-session notifications are still static/poll-driven. Polling vs WebSocket vs SSE?
+3. **Production migrations** — replace startup `create_all` with a real Flask-Migrate revision history before durable user data.
+4. **Frontend design system** — `rally-shared.css` is effective but large; split tokens, shared components, and page styles before the next major UI expansion.
