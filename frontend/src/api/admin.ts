@@ -149,9 +149,19 @@ export const adminApi = {
 
   overview: () => api<AdminOverview>("/admin/overview"),
 
-  listUsers: (params: { q?: string; page?: number; perPage?: number } = {}) => {
+  listUsers: (
+    params: {
+      q?: string;
+      status?: "all" | "verified" | "unverified" | "suspended" | "admin";
+      sport?: "Tennis" | "Pickleball";
+      page?: number;
+      perPage?: number;
+    } = {},
+  ) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set("q", params.q);
+    if (params.status && params.status !== "all") qs.set("status", params.status);
+    if (params.sport) qs.set("sport", params.sport);
     if (params.page) qs.set("page", String(params.page));
     if (params.perPage) qs.set("perPage", String(params.perPage));
     const suffix = qs.toString() ? `?${qs}` : "";

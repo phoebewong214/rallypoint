@@ -240,6 +240,8 @@ def list_users():
       - Bearer: []
     parameters:
       - {in: query, name: q,       type: string,  description: "match name/email/handle"}
+      - {in: query, name: status,  type: string,  enum: [all, verified, unverified, suspended, admin]}
+      - {in: query, name: sport,   type: string,  enum: [Tennis, Pickleball]}
       - {in: query, name: page,    type: integer, default: 1}
       - {in: query, name: perPage, type: integer, default: 25}
     responses:
@@ -261,6 +263,22 @@ def list_users():
             User.email.ilike(like),
             User.handle.ilike(like),
         ))
+
+    # Status filter (verification / suspension / admin).
+    status = (request.args.get("status") or "all").lower()
+    if status == "verified":
+        query = query.filter(User.email_verified.is_(True))
+    elif status == "unverified":
+        query = query.filter(User.email_verified.is_(False))
+    elif status == "suspended":
+        query = query.filter(User.is_active.is_(False))
+    elif status == "admin":
+        query = query.filter(User.is_admin.is_(True))
+
+    # Sport filter: users who have a profile for the given sport.
+    sport = request.args.get("sport")
+    if sport in ("Tennis", "Pickleball"):
+        query = query.filter(User.sport_profiles.any(SportProfile.sport == sport))
 
     total = query.with_entities(func.count(User.id)).scalar() or 0
     rows = (

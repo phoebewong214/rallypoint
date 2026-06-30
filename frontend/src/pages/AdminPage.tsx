@@ -52,6 +52,32 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; badgeCount?: n
   </button>
 );
 
+/* ---- Segmented filter chips (Users tab: status + sport) ---- */
+function FilterChips({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (key: string) => void;
+  options: { key: string; label: string }[];
+}) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {options.map((o) => (
+        <button
+          key={o.key}
+          className={"btn-ghost btn-sm" + (value === o.key ? " active" : "")}
+          style={value === o.key ? { borderColor: "var(--accent, #6366f1)", color: "var(--accent, #6366f1)" } : undefined}
+          onClick={() => onChange(o.key)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ---- Edit-user modal ---- */
 interface EditState {
   name: string;
@@ -954,6 +980,8 @@ const AdminPage: React.FC = () => {
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "verified" | "unverified" | "suspended" | "admin">("all");
+  const [sportFilter, setSportFilter] = useState<"all" | "Tennis" | "Pickleball">("all");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [tab, setTab] = useState<"overview" | "users" | "reports" | "support" | "courts">("overview");
@@ -965,6 +993,9 @@ const AdminPage: React.FC = () => {
     return () => clearTimeout(t);
   }, [q]);
 
+  // Changing a filter resets to the first page.
+  useEffect(() => { setPage(1); }, [statusFilter, sportFilter]);
+
   const loadStats = useCallback(() => {
     adminApi.stats().then(setStats).catch(() => {});
   }, []);
@@ -972,7 +1003,13 @@ const AdminPage: React.FC = () => {
   const loadUsers = useCallback(() => {
     setLoading(true);
     adminApi
-      .listUsers({ q: debouncedQ, page, perPage: PER_PAGE })
+      .listUsers({
+        q: debouncedQ,
+        status: statusFilter,
+        sport: sportFilter === "all" ? undefined : sportFilter,
+        page,
+        perPage: PER_PAGE,
+      })
       .then((res) => {
         setUsers(res.users);
         setTotal(res.total);
@@ -980,7 +1017,7 @@ const AdminPage: React.FC = () => {
       })
       .catch((err) => show(err instanceof ApiError ? err.message : "Failed to load users", "error"))
       .finally(() => setLoading(false));
-  }, [debouncedQ, page, show]);
+  }, [debouncedQ, statusFilter, sportFilter, page, show]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadUsers(); }, [loadUsers]);
@@ -1053,6 +1090,31 @@ const AdminPage: React.FC = () => {
             placeholder="Search name, email or @handle…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+
+        {/* Filters: status + sport, stack on top of the search. */}
+        <div style={{ display: "flex", gap: 16, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <FilterChips
+            value={statusFilter}
+            onChange={(k) => setStatusFilter(k as typeof statusFilter)}
+            options={[
+              { key: "all", label: "All" },
+              { key: "verified", label: "Verified" },
+              { key: "unverified", label: "Unverified" },
+              { key: "suspended", label: "Suspended" },
+              { key: "admin", label: "Admins" },
+            ]}
+          />
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <FilterChips
+            value={sportFilter}
+            onChange={(k) => setSportFilter(k as typeof sportFilter)}
+            options={[
+              { key: "all", label: "All sports" },
+              { key: "Tennis", label: "Tennis" },
+              { key: "Pickleball", label: "Pickleball" },
+            ]}
           />
         </div>
 
