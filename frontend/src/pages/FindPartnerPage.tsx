@@ -411,6 +411,11 @@ function PrefTimesMini({ slots }: { slots?: { dayOfWeek: number; timeBand: strin
 }
 
 function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
+  // Cards start collapsed: just who they are + the AI-match line, so more
+  // matches fit on screen. Expanding reveals the full profile — location,
+  // availability, preferred times, and why the matcher paired you.
+  const [expanded, setExpanded] = useState(false);
+  const hasWhy = (player.matchReasons && player.matchReasons.length > 0) || player.reason;
   return (
     <article className="card">
       <div className="card-top">
@@ -435,43 +440,66 @@ function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
         </div>
       </div>
 
-      <div className="meta-list">
-        <div className="meta-row">
-          <Icon name="pin" size={16} />
-          {player.distance && player.distance !== "—" ? (
-            <>
-              <span className="dist">{player.distance} mi</span>
-              {player.location && (
+      <button
+        type="button"
+        className="card-expand"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Hide" : "Show"} full profile for ${player.name}`}
+        title="Based on skill, distance, schedule overlap, and home court"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className={"match-tier " + (player.matchTier ?? "good")} title={TIER_LABEL[player.matchTier ?? "good"]}>
+          <Icon name="sparkles" size={13} stroke={2.4} /> {player.matchScore}% match
+        </span>
+        {!expanded && player.distance && player.distance !== "—" && (
+          <span className="card-expand-dist">{player.distance} mi</span>
+        )}
+        <span className="card-expand-hint">
+          {expanded ? "Less" : "Details"} <Icon name="chevron" size={14} />
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="card-details">
+          <div className="meta-list">
+            <div className="meta-row">
+              <Icon name="pin" size={16} />
+              {player.distance && player.distance !== "—" ? (
                 <>
-                  <span style={{ color: "var(--text-low)" }}>·</span>
-                  <span>{player.location}</span>
+                  <span className="dist">{player.distance} mi</span>
+                  {player.location && (
+                    <>
+                      <span style={{ color: "var(--text-low)" }}>·</span>
+                      <span>{player.location}</span>
+                    </>
+                  )}
                 </>
+              ) : (
+                <span>{player.location || "Distance unknown"}</span>
               )}
-            </>
-          ) : (
-            <span>{player.location || "Distance unknown"}</span>
+            </div>
+            <div className="meta-row">
+              <Icon name="calendar" size={16} />
+              <b>{player.availability}</b>
+            </div>
+          </div>
+
+          <PrefTimesMini slots={player.availabilitySlots} />
+
+          {hasWhy && (
+            <div className="match-box">
+              <div className="match-box-caption">Why this match</div>
+              {player.matchReasons && player.matchReasons.length > 0 ? (
+                <div className="match-chips">
+                  {player.matchReasons.map((r: string) => <span key={r} className="match-chip">{r}</span>)}
+                </div>
+              ) : (
+                <p className="match-text">{player.reason}</p>
+              )}
+            </div>
           )}
         </div>
-        <div className="meta-row">
-          <Icon name="calendar" size={16} />
-          <b>{player.availability}</b>
-        </div>
-      </div>
-
-      <PrefTimesMini slots={player.availabilitySlots} />
-
-      <div className="match-box" title="Based on skill, distance, schedule overlap, and home court">
-        <div className={"match-tier " + (player.matchTier ?? "good")} title={TIER_LABEL[player.matchTier ?? "good"]}>
-          <Icon name="sparkles" size={13} stroke={2.4} /> {player.matchScore}% match
-        </div>
-        {player.matchReasons && player.matchReasons.length > 0 ? (
-          <div className="match-chips">
-            {player.matchReasons.map((r: string) => <span key={r} className="match-chip">{r}</span>)}
-          </div>
-        ) : (
-          <p className="match-text">{player.reason}</p>
-        )}
-      </div>
+      )}
 
       <div className="card-action">
         <button
