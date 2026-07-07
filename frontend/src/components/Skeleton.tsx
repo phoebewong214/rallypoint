@@ -37,7 +37,8 @@ export const Spinner: React.FC<{ size?: number }> = ({ size = 14 }) => (
   />
 );
 
-/* Player card-shaped skeleton — matches the FindPartner card geometry */
+/* Player card-shaped skeleton — matches the collapsed FindPartner card:
+   header, AI-match strip, action row. */
 export const PlayerCardSkeleton: React.FC = () => (
   <div className="skeleton-card" aria-busy="true" aria-label="Loading player">
     <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
@@ -50,11 +51,7 @@ export const PlayerCardSkeleton: React.FC = () => (
         </div>
       </div>
     </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <Skeleton width="60%" height={14} />
-      <Skeleton width="50%" height={14} />
-    </div>
-    <Skeleton width="100%" height={68} radius={10} />
+    <Skeleton width="100%" height={40} radius={10} />
     <div style={{ display: "flex", gap: 8 }}>
       <Skeleton width="100%" height={44} radius={8} />
       <Skeleton width={44} height={44} radius={8} />
