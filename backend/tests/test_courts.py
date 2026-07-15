@@ -1,8 +1,12 @@
 """
 Tests for the Courts endpoints: real viewer distance + favorites toggle.
 """
+from datetime import datetime, timedelta
+
 from extensions import db
 from models import Court
+
+_FUTURE = (datetime.utcnow() + timedelta(days=45)).replace(microsecond=0).isoformat()
 
 
 def _signup(client, email, lat=None, lng=None):
@@ -121,7 +125,7 @@ def test_create_session_with_court_records_it(client, app):
         bid = User.query.filter_by(email="cg@rally.app").first().id
     r = client.post("/api/sessions", headers=a, json={
         "guestId": bid, "sport": "Tennis",
-        "scheduledAt": "2026-09-01T18:00:00", "court": "grant-park",
+        "scheduledAt": _FUTURE, "court": "grant-park",
     })
     assert r.status_code == 201, r.get_json()
     assert r.get_json()["session"]["court"] == "Grant Park Tennis Center"

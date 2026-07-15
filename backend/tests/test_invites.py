@@ -9,6 +9,12 @@ from extensions import db
 from models import GameInvite
 from models.game_invite import TimeProposal, PHASE_SETTLING
 
+# Future-relative so the "must be in the future" validation keeps passing.
+_base = (datetime.utcnow() + timedelta(days=60)).replace(hour=18, minute=0, second=0, microsecond=0)
+_START = _base.isoformat()
+_END = (_base + timedelta(hours=2)).isoformat()
+_MID = (_base + timedelta(hours=1)).isoformat()
+
 
 def _signup(client, email, sport="Tennis", ntrp="3.5"):
     r = client.post("/api/auth/signup", json={
@@ -75,7 +81,7 @@ def test_confirmed_invites_excluded_from_feed(client):
 
 # ---- mutations ------------------------------------------------------------
 
-def _create(client, h, invitee_id, start="2026-12-01T18:00:00", end=None, sport="Tennis"):
+def _create(client, h, invitee_id, start=_START, end=None, sport="Tennis"):
     body = {"inviteeId": invitee_id, "sport": sport, "startAt": start}
     if end:
         body["endAt"] = end
@@ -134,13 +140,13 @@ def test_inviter_cannot_accept_own_time(client):
 def test_window_requires_specific_before_accept(client):
     ta, _ = _signup(client, "w_a@rally.app")
     tb, bid = _signup(client, "w_b@rally.app")
-    iid = _create(client, _h(ta), bid, start="2026-12-01T18:00:00", end="2026-12-01T20:00:00").get_json()["invite"]["id"]
+    iid = _create(client, _h(ta), bid, start=_START, end=_END).get_json()["invite"]["id"]
     # can't one-tap accept a bare window
     assert client.post(f"/api/invites/{iid}/accept-time", headers=_h(tb)).status_code == 409
     # B confirms opponent, then proposes a specific time inside the window
     assert client.post(f"/api/invites/{iid}/confirm-opponent", headers=_h(tb)).status_code == 200
     assert client.post(f"/api/invites/{iid}/propose-time", headers=_h(tb),
-                       json={"startAt": "2026-12-01T19:00:00"}).status_code == 200
+                       json={"startAt": _MID}).status_code == 200
     # now A (the non-proposer) accepts B's specific time → confirmed
     r = client.post(f"/api/invites/{iid}/accept-time", headers=_h(ta))
     assert r.status_code == 200 and r.get_json()["invite"]["phase"] == "confirmed"
@@ -149,7 +155,7 @@ def test_window_requires_specific_before_accept(client):
 def test_confirm_opponent_only_invitee(client):
     ta, _ = _signup(client, "co_a@rally.app")
     _, bid = _signup(client, "co_b@rally.app")
-    iid = _create(client, _h(ta), bid, start="2026-12-01T18:00:00", end="2026-12-01T20:00:00").get_json()["invite"]["id"]
+    iid = _create(client, _h(ta), bid, start=_START, end=_END).get_json()["invite"]["id"]
     assert client.post(f"/api/invites/{iid}/confirm-opponent", headers=_h(ta)).status_code == 403
 
 

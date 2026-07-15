@@ -3,6 +3,13 @@ Tests for the session scheduling lifecycle:
 request → (guest) accept / decline → reschedule (re-opens to the other party) →
 cancel. Covers the viewer-relative status that makes accept actually reachable.
 """
+from datetime import datetime, timedelta
+
+# Schedule times are computed relative to "now" so the future-time validation
+# on scheduledAt keeps passing as the calendar advances (no hardcoded dates).
+_SOON = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
+_LATER = (datetime.utcnow() + timedelta(days=8)).replace(microsecond=0).isoformat()
+_LATEST = (datetime.utcnow() + timedelta(days=9)).replace(microsecond=0).isoformat()
 
 
 def _signup(client, email, name="Player"):
@@ -19,7 +26,7 @@ def _list(client, headers):
     return client.get("/api/sessions", headers=headers).get_json()["sessions"]
 
 
-def _request(client, host_headers, guest_id, when="2026-07-01T18:00:00"):
+def _request(client, host_headers, guest_id, when=_SOON):
     r = client.post(
         "/api/sessions",
         headers=host_headers,
@@ -66,12 +73,12 @@ def test_reschedule_reopens_to_the_other_party(client):
     rs = client.post(
         f"/api/sessions/{sid}/reschedule",
         headers=b,
-        json={"scheduledAt": "2026-07-02T19:00:00"},
+        json={"scheduledAt": _LATER},
     )
     assert rs.status_code == 200
     ga = _list(client, a)[0]
     assert ga["status"] == "requested" and ga["bucket"] == "requests"
-    assert ga["scheduledAt"].startswith("2026-07-02")
+    assert ga["scheduledAt"].startswith(_LATER[:10])
 
 
 def test_cancel_keeps_a_trace_in_past(client):
@@ -98,7 +105,7 @@ def test_duplicate_request_to_same_player_is_rejected(client):
     r = client.post(
         "/api/sessions",
         headers=a,
-        json={"guestId": b_id, "sport": "Tennis", "scheduledAt": "2026-07-05T18:00:00"},
+        json={"guestId": b_id, "sport": "Tennis", "scheduledAt": _LATEST},
     )
     assert r.status_code == 409, r.get_json()
     assert r.get_json().get("session", {}).get("id") == first
