@@ -1,0 +1,1208 @@
+RallyPoint API — Milestone 2 live demonstration
+Generated: 2026-07-15T15:50:15.749043Z  (UTC)
+Database:  /tmp/rallypoint_api_demo.db (fresh SQLite, seeded with 2 users + 1 court)
+
+Initial DB state (empty tables): {'users': 0, 'sport_profiles': 0, 'availability_slots': 0, 'courts': 0, 'court_favorites': 0, 'court_checkins': 0, 'court_appointments': 0, 'appointment_participants': 0, 'saved_players': 0, 'sessions': 0, 'game_invites': 0, 'time_proposals': 0, 'ai_match_logs': 0, 'user_reports': 0, 'support_tickets': 0}
+After seed:       {'users': 2, 'sport_profiles': 2, 'availability_slots': 0, 'courts': 1, 'court_favorites': 0, 'court_checkins': 0, 'court_appointments': 0, 'appointment_participants': 0, 'saved_players': 0, 'sessions': 0, 'game_invites': 0, 'time_proposals': 0, 'ai_match_logs': 0, 'user_reports': 0, 'support_tickets': 0}
+
+==============================================================================
+STEP 1: Sign up a brand-new account (INSERT users + sport_profiles)
+==============================================================================
+  POST /api/auth/signup   ->  HTTP 201
+  request body:
+    {
+      "email": "casey@rally.app",
+      "password": "rally1234",
+      "name": "Casey Nguyen",
+      "sport": "Pickleball",
+      "ntrp": "3.5",
+      "location": "West Loop, Chicago"
+    }
+  response body:
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwidHYiOjEsImlhdCI6MTc4NDEzMDYxNiwiZXhwIjoxNzg0NzM1NDE2fQ.usA0C1u6hCPip8O4Ww2abMt4V2UCzC7vfecErIePVW0",
+      "user": {
+        "availability": [],
+        "avatarColor": null,
+        "avatarFg": null,
+        "bio": null,
+        "email": "casey@rally.app",
+        "emailVerified": false,
+        "handle": "@caseynguyen",
+        "id": 3,
+        "initials": "CN",
+        "isActive": true,
+        "isAdmin": false,
+        "joined": "Jul 2026",
+        "lat": null,
+        "lng": null,
+        "location": "West Loop, Chicago",
+        "name": "Casey Nguyen",
+        "primarySport": "Pickleball",
+        "sportProfiles": [
+          {
+            "availability": null,
+            "homeCourt": null,
+            "homeCourtId": null,
+            "homeCourtName": null,
+            "ntrp": "3.5",
+            "sport": "Pickleball"
+          }
+        ]
+      }
+    }
+  DB DELTA: users 2->3 (+1 row); sport_profiles 2->3 (+1 row)
+
+==============================================================================
+STEP 2: Log in as the seeded admin (no DB write — issues a JWT)
+==============================================================================
+  POST /api/auth/login   ->  HTTP 200
+  request body:
+    {
+      "email": "alex@rally.app",
+      "password": "rally1234"
+    }
+  response body:
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwidHYiOjEsImlhdCI6MTc4NDEzMDYxNiwiZXhwIjoxNzg0NzM1NDE2fQ.YxT17onJBHl9TSQ2cJzYNucjWPX0t5YVT31CwqUi2aw",
+      "user": {
+        "availability": [],
+        "avatarColor": null,
+        "avatarFg": null,
+        "bio": "Consistent baseliner, love long rallies and weekend games.",
+        "email": "alex@rally.app",
+        "emailVerified": true,
+        "handle": "@alex",
+        "id": 1,
+        "initials": "AR",
+        "isActive": true,
+        "isAdmin": true,
+        "joined": "Jul 2026",
+        "lat": 41.8819,
+        "lng": -87.6278,
+        "location": "The Loop, Chicago",
+        "name": "Alex Rivera",
+        "primarySport": "Pickleball",
+        "sportProfiles": [
+          {
+            "availability": null,
+            "homeCourt": null,
+            "homeCourtId": null,
+            "homeCourtName": null,
+            "ntrp": "3.5",
+            "sport": "Pickleball"
+          }
+        ]
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 3: Reject a bad login (401, no write)
+==============================================================================
+  POST /api/auth/login   ->  HTTP 401
+  request body:
+    {
+      "email": "alex@rally.app",
+      "password": "wrong-password"
+    }
+  response body:
+    {
+      "error": "Invalid email or password"
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 4: Validation failure returns a structured 422 (no write)
+==============================================================================
+  POST /api/auth/signup   ->  HTTP 422
+  request body:
+    {
+      "email": "not-an-email",
+      "password": "short",
+      "name": ""
+    }
+  response body:
+    {
+      "error": "validation failed",
+      "fields": {
+        "email": [
+          "value is not a valid email address: An email address must have an @-sign."
+        ],
+        "name": [
+          "String should have at least 1 character"
+        ],
+        "password": [
+          "String should have at least 8 characters"
+        ]
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 5: Who am I? (GET /auth/me, read-only)
+==============================================================================
+  GET /api/auth/me   ->  HTTP 200
+  response body:
+    {
+      "user": {
+        "availability": [],
+        "avatarColor": null,
+        "avatarFg": null,
+        "bio": "Consistent baseliner, love long rallies and weekend games.",
+        "email": "alex@rally.app",
+        "emailVerified": true,
+        "handle": "@alex",
+        "id": 1,
+        "initials": "AR",
+        "isActive": true,
+        "isAdmin": true,
+        "joined": "Jul 2026",
+        "lat": 41.8819,
+        "lng": -87.6278,
+        "location": "The Loop, Chicago",
+        "name": "Alex Rivera",
+        "primarySport": "Pickleball",
+        "sportProfiles": [
+          {
+            "availability": null,
+            "homeCourt": null,
+            "homeCourtId": null,
+            "homeCourtName": null,
+            "ntrp": "3.5",
+            "sport": "Pickleball"
+          }
+        ]
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 6: Update my profile + weekly availability (UPDATE users, INSERT slots)
+==============================================================================
+  PATCH /api/auth/me   ->  HTTP 200
+  request body:
+    {
+      "bio": "4.0-ish dinker, quick hands at the net.",
+      "location": "Gold Coast, Chicago",
+      "availability": [
+        {
+          "dayOfWeek": 5,
+          "timeBand": "MORN",
+          "status": 2
+        },
+        {
+          "dayOfWeek": 6,
+          "timeBand": "MORN",
+          "status": 2
+        },
+        {
+          "dayOfWeek": 2,
+          "timeBand": "EVE",
+          "status": 1
+        }
+      ]
+    }
+  response body:
+    {
+      "user": {
+        "availability": [
+          {
+            "dayOfWeek": 5,
+            "status": 2,
+            "timeBand": "MORN"
+          },
+          {
+            "dayOfWeek": 6,
+            "status": 2,
+            "timeBand": "MORN"
+          },
+          {
+            "dayOfWeek": 2,
+            "status": 1,
+            "timeBand": "EVE"
+          }
+        ],
+        "avatarColor": null,
+        "avatarFg": null,
+        "bio": "4.0-ish dinker, quick hands at the net.",
+        "email": "alex@rally.app",
+        "emailVerified": true,
+        "handle": "@alex",
+        "id": 1,
+        "initials": "AR",
+        "isActive": true,
+        "isAdmin": true,
+        "joined": "Jul 2026",
+        "lat": 41.8819,
+        "lng": -87.6278,
+        "location": "Gold Coast, Chicago",
+        "name": "Alex Rivera",
+        "primarySport": "Pickleball",
+        "sportProfiles": [
+          {
+            "availability": null,
+            "homeCourt": null,
+            "homeCourtId": null,
+        ... (7 more lines)
+  DB DELTA: availability_slots 0->3 (+3 rows)
+  ROW BEFORE: {'id': 1, 'location': 'The Loop, Chicago', 'bio': 'Consistent baseliner, love long rallies and weekend games.'}
+  ROW AFTER:  {'id': 1, 'location': 'Gold Coast, Chicago', 'bio': '4.0-ish dinker, quick hands at the net.'}
+
+==============================================================================
+STEP 7: AI-ranked partner list for the viewer (read-only GET; scores inline)
+==============================================================================
+  GET /api/players?sport=Pickleball   ->  HTTP 200
+  response body:
+    {
+      "count": 2,
+      "players": [
+        {
+          "availability": null,
+          "availabilitySlots": [],
+          "color": null,
+          "distance": "0.9",
+          "fg": null,
+          "id": 2,
+          "initials": "MP",
+          "location": "Streeterville, Chicago",
+          "matchReasons": [
+            "Same level (DUPR 3.5)",
+            "0.9 mi away"
+          ],
+          "matchScore": 72,
+          "matchTier": "great",
+          "name": "Maya Patel",
+          "ntrp": "3.5",
+          "online": false,
+          "pickleball": {
+            "availability": null,
+            "homeCourt": null,
+            "homeCourtId": null,
+            "homeCourtName": null,
+            "ntrp": "3.5",
+            "sport": "Pickleball"
+          },
+          "reason": "Same level (DUPR 3.5); 0.9 mi away",
+          "saved": false,
+          "sport": "Pickleball",
+          "tennis": null
+        },
+        {
+          "availability": null,
+          "availabilitySlots": [],
+          "color": null,
+          "distance": "\u2014",
+          "fg": null,
+        ... (26 more lines)
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 8: Save a player (INSERT saved_players)
+==============================================================================
+  POST /api/players/2/save   ->  HTTP 200
+  response body:
+    {
+      "id": 2,
+      "saved": true
+    }
+  DB DELTA: saved_players 0->1 (+1 row)
+
+==============================================================================
+STEP 9: Un-save the player (DELETE saved_players)
+==============================================================================
+  DELETE /api/players/2/save   ->  HTTP 200
+  response body:
+    {
+      "id": 2,
+      "saved": false
+    }
+  DB DELTA: saved_players 1->0 (-1 row)
+
+==============================================================================
+STEP 10: File a trust & safety report against a player (INSERT user_reports)
+==============================================================================
+  POST /api/players/3/report   ->  HTTP 201
+  request body:
+    {
+      "reason": "no_show",
+      "details": "Booked a game then never showed."
+    }
+  response body:
+    {
+      "ok": true
+    }
+  DB DELTA: user_reports 0->1 (+1 row)
+
+==============================================================================
+STEP 11: On-demand AI match reason, cached (INSERT ai_match_logs)
+==============================================================================
+  POST /api/ai/match-reason   ->  HTTP 200
+  request body:
+    {
+      "candidateId": 2,
+      "sport": "Pickleball"
+    }
+  response body:
+    {
+      "reason": "Same level (DUPR 3.5); 0.9 mi away",
+      "score": 72,
+      "source": "heuristic"
+    }
+  DB DELTA: ai_match_logs 0->1 (+1 row)
+
+==============================================================================
+STEP 12: Same call again — upserts the cached row (no new row)
+==============================================================================
+  POST /api/ai/match-reason   ->  HTTP 200
+  request body:
+    {
+      "candidateId": 2,
+      "sport": "Pickleball"
+    }
+  response body:
+    {
+      "reason": "Same level (DUPR 3.5); 0.9 mi away",
+      "score": 72,
+      "source": "heuristic"
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 13: Alex requests a game with Maya (INSERT sessions, status=pending)
+==============================================================================
+  POST /api/sessions   ->  HTTP 201
+  request body:
+    {
+      "guestId": 2,
+      "sport": "Pickleball",
+      "scheduledAt": "2026-07-22T15:50:15",
+      "court": "grant-park",
+      "note": "Sat morning hit?"
+    }
+  response body:
+    {
+      "session": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "id": 1,
+        "month": "Jul",
+        "note": "Sat morning hit?",
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": true,
+        "sport": "Pickleball",
+        "status": "pending",
+        "time": "3:50 PM",
+        "weekday": "Wed"
+      }
+    }
+  DB DELTA: sessions 0->1 (+1 row)
+
+==============================================================================
+STEP 14: Duplicate request is rejected (409, no new row)
+==============================================================================
+  POST /api/sessions   ->  HTTP 409
+  request body:
+    {
+      "guestId": 2,
+      "sport": "Pickleball",
+      "scheduledAt": "2026-07-23T15:50:15"
+    }
+  response body:
+    {
+      "error": "You already have a game in the works with this player.",
+      "session": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "id": 1,
+        "month": "Jul",
+        "note": "Sat morning hit?",
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": true,
+        "sport": "Pickleball",
+        "status": "pending",
+        "time": "3:50 PM",
+        "weekday": "Wed"
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 15: Maya accepts the request (UPDATE sessions status -> confirmed)
+==============================================================================
+  POST /api/sessions/1/accept   ->  HTTP 200
+  response body:
+    {
+      "session": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "id": 1,
+        "month": "Jul",
+        "note": "Sat morning hit?",
+        "opp": "Alex Rivera",
+        "oppHandle": "@alex",
+        "oppId": 1,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": false,
+        "sport": "Pickleball",
+        "status": "confirmed",
+        "time": "3:50 PM",
+        "weekday": "Wed"
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'pending', 'scheduled_at': '2026-07-22 15:50:15.000000'}
+  ROW AFTER:  {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'confirmed', 'scheduled_at': '2026-07-22 15:50:15.000000'}
+
+==============================================================================
+STEP 16: Maya reschedules — re-opens to Alex (UPDATE sessions time + status)
+==============================================================================
+  POST /api/sessions/1/reschedule   ->  HTTP 200
+  request body:
+    {
+      "scheduledAt": "2026-07-23T15:50:15"
+    }
+  response body:
+    {
+      "session": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "23",
+        "id": 1,
+        "month": "Jul",
+        "note": "Sat morning hit?",
+        "opp": "Alex Rivera",
+        "oppHandle": "@alex",
+        "oppId": 1,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-23T15:50:15",
+        "sentByMe": true,
+        "sport": "Pickleball",
+        "status": "pending",
+        "time": "3:50 PM",
+        "weekday": "Thu"
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'confirmed', 'scheduled_at': '2026-07-22 15:50:15.000000'}
+  ROW AFTER:  {'id': 1, 'host_id': 2, 'guest_id': 1, 'status': 'pending', 'scheduled_at': '2026-07-23 15:50:15.000000'}
+
+==============================================================================
+STEP 17: List sessions from Alex's perspective (read-only, viewer-relative)
+==============================================================================
+  GET /api/sessions   ->  HTTP 200
+  response body:
+    {
+      "sessions": [
+        {
+          "bucket": "requests",
+          "court": "Grant Park Tennis Center",
+          "courtMiles": null,
+          "day": "23",
+          "id": 1,
+          "month": "Jul",
+          "note": "Sat morning hit?",
+          "opp": "Maya Patel",
+          "oppHandle": "@maya",
+          "oppId": 2,
+          "oppNtrp": "3.5",
+          "scheduledAt": "2026-07-23T15:50:15",
+          "sentByMe": false,
+          "sport": "Pickleball",
+          "status": "requested",
+          "time": "3:50 PM",
+          "weekday": "Thu"
+        }
+      ]
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 18: Cancel the session — kept as a trace (UPDATE status -> cancelled)
+==============================================================================
+  POST /api/sessions/1/cancel   ->  HTTP 200
+  response body:
+    {
+      "session": {
+        "bucket": "past",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "23",
+        "id": 1,
+        "month": "Jul",
+        "note": "Sat morning hit?",
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-23T15:50:15",
+        "sentByMe": false,
+        "sport": "Pickleball",
+        "status": "cancelled",
+        "time": "3:50 PM",
+        "weekday": "Thu"
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'status': 'pending'}
+  ROW AFTER:  {'id': 1, 'status': 'cancelled'}
+
+==============================================================================
+STEP 19: List courts with real distance + activity counts (read-only)
+==============================================================================
+  GET /api/courts?sport=Pickleball   ->  HTTP 200
+  response body:
+    {
+      "count": 1,
+      "courts": [
+        {
+          "addr": "331 E Randolph St, Chicago",
+          "courtCount": 12,
+          "distance": 0.5,
+          "fav": false,
+          "hereNow": 0,
+          "id": "grant-park",
+          "lat": 41.8835,
+          "lights": true,
+          "lng": -87.6188,
+          "name": "Grant Park Tennis Center",
+          "openGames": 0,
+          "primary": "tennis",
+          "regulars": [],
+          "regularsCount": 0,
+          "sports": [
+            "Tennis",
+            "Pickleball"
+          ],
+          "surface": "Outdoor \u00b7 Hard",
+          "upcomingCount": 0
+        }
+      ]
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 20: Favorite a court (INSERT court_favorites)
+==============================================================================
+  POST /api/courts/grant-park/favorite   ->  HTTP 200
+  response body:
+    {
+      "fav": true,
+      "id": "grant-park"
+    }
+  DB DELTA: court_favorites 0->1 (+1 row)
+
+==============================================================================
+STEP 21: Check in 'I'm here now' (INSERT court_checkins)
+==============================================================================
+  POST /api/courts/grant-park/checkin   ->  HTTP 200
+  request body:
+    {
+      "lat": 41.8836,
+      "lng": -87.6189
+    }
+  response body:
+    {
+      "checkedIn": true,
+      "ok": true
+    }
+  DB DELTA: court_checkins 0->1 (+1 row)
+
+==============================================================================
+STEP 22: Create an open game at the court (INSERT court_appointments + participant)
+==============================================================================
+  POST /api/courts/grant-park/appointments   ->  HTTP 201
+  request body:
+    {
+      "sport": "Pickleball",
+      "scheduledAt": "2026-07-22T15:50:15",
+      "maxPlayers": 2
+    }
+  response body:
+    {
+      "appointment": {
+        "confirmedCount": 1,
+        "courtName": "Grant Park Tennis Center",
+        "courtSlug": "grant-park",
+        "host": "Alex Rivera",
+        "id": 1,
+        "isHost": true,
+        "joined": true,
+        "maxPlayers": 2,
+        "note": null,
+        "players": [
+          {
+            "color": null,
+            "initials": "AR",
+            "name": "Alex Rivera"
+          }
+        ],
+        "queuePosition": null,
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sport": "Pickleball",
+        "spotsLeft": 1,
+        "status": "open",
+        "waitlistCount": 0,
+        "waitlisted": false
+      }
+    }
+  DB DELTA: court_appointments 0->1 (+1 row); appointment_participants 0->1 (+1 row)
+
+==============================================================================
+STEP 23: Maya joins the open game (INSERT appointment_participants)
+==============================================================================
+  POST /api/appointments/1/join   ->  HTTP 200
+  response body:
+    {
+      "appointment": {
+        "confirmedCount": 2,
+        "courtName": "Grant Park Tennis Center",
+        "courtSlug": "grant-park",
+        "host": "Alex Rivera",
+        "id": 1,
+        "isHost": false,
+        "joined": true,
+        "maxPlayers": 2,
+        "note": null,
+        "players": [
+          {
+            "color": null,
+            "initials": "AR",
+            "name": "Alex Rivera"
+          },
+          {
+            "color": null,
+            "initials": "MP",
+            "name": "Maya Patel"
+          }
+        ],
+        "queuePosition": null,
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sport": "Pickleball",
+        "spotsLeft": 0,
+        "status": "open",
+        "waitlistCount": 0,
+        "waitlisted": false
+      }
+    }
+  DB DELTA: appointment_participants 1->2 (+1 row)
+
+==============================================================================
+STEP 24: Casey joins a full game -> waitlisted (INSERT participant, waitlisted)
+==============================================================================
+  POST /api/appointments/1/join   ->  HTTP 200
+  response body:
+    {
+      "appointment": {
+        "confirmedCount": 2,
+        "courtName": "Grant Park Tennis Center",
+        "courtSlug": "grant-park",
+        "host": "Alex Rivera",
+        "id": 1,
+        "isHost": false,
+        "joined": false,
+        "maxPlayers": 2,
+        "note": null,
+        "players": [
+          {
+            "color": null,
+            "initials": "AR",
+            "name": "Alex Rivera"
+          },
+          {
+            "color": null,
+            "initials": "MP",
+            "name": "Maya Patel"
+          }
+        ],
+        "queuePosition": 1,
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sport": "Pickleball",
+        "spotsLeft": 0,
+        "status": "open",
+        "waitlistCount": 1,
+        "waitlisted": true
+      }
+    }
+  DB DELTA: appointment_participants 2->3 (+1 row)
+
+==============================================================================
+STEP 25: Maya leaves -> Casey promoted off the waitlist (DELETE + promote)
+==============================================================================
+  POST /api/appointments/1/leave   ->  HTTP 200
+  response body:
+    {
+      "appointment": {
+        "confirmedCount": 2,
+        "courtName": "Grant Park Tennis Center",
+        "courtSlug": "grant-park",
+        "host": "Alex Rivera",
+        "id": 1,
+        "isHost": false,
+        "joined": false,
+        "maxPlayers": 2,
+        "note": null,
+        "players": [
+          {
+            "color": null,
+            "initials": "AR",
+            "name": "Alex Rivera"
+          },
+          {
+            "color": null,
+            "initials": "CN",
+            "name": "Casey Nguyen"
+          }
+        ],
+        "queuePosition": null,
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sport": "Pickleball",
+        "spotsLeft": 0,
+        "status": "open",
+        "waitlistCount": 0,
+        "waitlisted": false
+      }
+    }
+  DB DELTA: appointment_participants 3->2 (-1 row)
+
+==============================================================================
+STEP 26: Check out of the court (DELETE court_checkins)
+==============================================================================
+  DELETE /api/courts/grant-park/checkin   ->  HTTP 200
+  response body:
+    {
+      "checkedIn": false,
+      "ok": true
+    }
+  DB DELTA: court_checkins 1->0 (-1 row)
+
+==============================================================================
+STEP 27: Alex invites Maya with a time WINDOW (INSERT game_invites + time_proposals)
+==============================================================================
+  POST /api/invites   ->  HTTP 201
+  request body:
+    {
+      "inviteeId": 2,
+      "sport": "Pickleball",
+      "startAt": "2026-07-22T15:50:15",
+      "endAt": "2026-07-23T15:50:15",
+      "court": "grant-park"
+    }
+  response body:
+    {
+      "invite": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "declineReason": null,
+        "id": 1,
+        "isWindow": true,
+        "kind": "invite",
+        "month": "Jul",
+        "note": null,
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "phase": "awaiting_opponent",
+        "proposalEnd": "2026-07-23T15:50:15",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": true,
+        "sport": "Pickleball",
+        "status": "pending",
+        "time": "3:50 PM",
+        "weekday": "Wed",
+        "yourTurn": false
+      }
+    }
+  DB DELTA: game_invites 0->1 (+1 row); time_proposals 0->1 (+1 row)
+
+==============================================================================
+STEP 28: Maya confirms she'll play (UPDATE game_invites phase -> settling)
+==============================================================================
+  POST /api/invites/1/confirm-opponent   ->  HTTP 200
+  response body:
+    {
+      "invite": {
+        "bucket": "requests",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "declineReason": null,
+        "id": 1,
+        "isWindow": true,
+        "kind": "invite",
+        "month": "Jul",
+        "note": null,
+        "opp": "Alex Rivera",
+        "oppHandle": "@alex",
+        "oppId": 1,
+        "oppNtrp": "3.5",
+        "phase": "settling_time",
+        "proposalEnd": "2026-07-23T15:50:15",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": false,
+        "sport": "Pickleball",
+        "status": "requested",
+        "time": "3:50 PM",
+        "weekday": "Wed",
+        "yourTurn": true
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'phase': 'awaiting_opponent'}
+  ROW AFTER:  {'id': 1, 'phase': 'settling_time'}
+
+==============================================================================
+STEP 29: Maya proposes a SPECIFIC time (INSERT time_proposals, supersede old)
+==============================================================================
+  POST /api/invites/1/propose-time   ->  HTTP 200
+  request body:
+    {
+      "startAt": "2026-07-22T15:50:15"
+    }
+  response body:
+    {
+      "invite": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "declineReason": null,
+        "id": 1,
+        "isWindow": false,
+        "kind": "invite",
+        "month": "Jul",
+        "note": null,
+        "opp": "Alex Rivera",
+        "oppHandle": "@alex",
+        "oppId": 1,
+        "oppNtrp": "3.5",
+        "phase": "settling_time",
+        "proposalEnd": null,
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": false,
+        "sport": "Pickleball",
+        "status": "pending",
+        "time": "3:50 PM",
+        "weekday": "Wed",
+        "yourTurn": false
+      }
+    }
+  DB DELTA: time_proposals 1->2 (+1 row)
+
+==============================================================================
+STEP 30: Alex accepts the time -> materializes a confirmed session (INSERT sessions, UPDATE invite phase -> confirmed)
+==============================================================================
+  POST /api/invites/1/accept-time   ->  HTTP 200
+  response body:
+    {
+      "invite": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": null,
+        "declineReason": null,
+        "id": 1,
+        "isWindow": false,
+        "kind": "invite",
+        "month": null,
+        "note": null,
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "phase": "confirmed",
+        "proposalEnd": null,
+        "scheduledAt": null,
+        "sentByMe": true,
+        "sport": "Pickleball",
+        "status": "confirmed",
+        "time": null,
+        "weekday": null,
+        "yourTurn": false
+      },
+      "session": {
+        "bucket": "upcoming",
+        "court": "Grant Park Tennis Center",
+        "courtMiles": null,
+        "day": "22",
+        "id": 2,
+        "month": "Jul",
+        "note": null,
+        "opp": "Maya Patel",
+        "oppHandle": "@maya",
+        "oppId": 2,
+        "oppNtrp": "3.5",
+        "scheduledAt": "2026-07-22T15:50:15",
+        "sentByMe": true,
+        ... (6 more lines)
+  DB DELTA: sessions 1->2 (+1 row)
+  ROW BEFORE: {'id': 1, 'phase': 'settling_time', 'session_id': None}
+  ROW AFTER:  {'id': 1, 'phase': 'confirmed', 'session_id': 2}
+
+==============================================================================
+STEP 31: Escalate to a human -> persisted ticket (INSERT support_tickets)
+==============================================================================
+  POST /api/support/escalate   ->  HTTP 200
+  request body:
+    {
+      "message": "I can't change my home court \u2014 is that a bug?"
+    }
+  response body:
+    {
+      "emailed": true,
+      "ok": true,
+      "ticketId": 1
+    }
+  DB DELTA: support_tickets 0->1 (+1 row)
+
+==============================================================================
+STEP 32: Admin dashboard overview (read-only aggregate)
+==============================================================================
+  GET /api/admin/overview   ->  HTTP 200
+  response body:
+    {
+      "recentInvites": [
+        {
+          "createdAt": "2026-07-15T15:50:17.019397",
+          "id": 1,
+          "invitee": "Maya Patel",
+          "inviter": "Alex Rivera",
+          "phase": "confirmed",
+          "sport": "Pickleball"
+        }
+      ],
+      "recentSignups": [
+        {
+          "createdAt": "2026-07-15T15:50:16.348309",
+          "email": "casey@rally.app",
+          "handle": "@caseynguyen",
+          "id": 3,
+          "name": "Casey Nguyen"
+        },
+        {
+          "createdAt": "2026-07-15T15:50:16.215161",
+          "email": "maya@rally.app",
+          "handle": "@maya",
+          "id": 2,
+          "name": "Maya Patel"
+        },
+        {
+          "createdAt": "2026-07-15T15:50:16.214359",
+          "email": "alex@rally.app",
+          "handle": "@alex",
+          "id": 1,
+          "name": "Alex Rivera"
+        }
+      ],
+      "signupSeries": [
+        {
+          "count": 0,
+          "date": "2026-07-02"
+        },
+        {
+        ... (53 more lines)
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 33: Admin lists users (read-only)
+==============================================================================
+  GET /api/admin/users   ->  HTTP 200
+  response body:
+    {
+      "page": 1,
+      "pages": 1,
+      "perPage": 25,
+      "total": 3,
+      "users": [
+        {
+          "availability": [],
+          "avatarColor": null,
+          "avatarFg": null,
+          "bio": null,
+          "createdAt": "2026-07-15T15:50:16.348309",
+          "email": "casey@rally.app",
+          "emailVerified": false,
+          "handle": "@caseynguyen",
+          "id": 3,
+          "initials": "CN",
+          "isActive": true,
+          "isAdmin": false,
+          "joined": "Jul 2026",
+          "lat": null,
+          "lng": null,
+          "location": "West Loop, Chicago",
+          "name": "Casey Nguyen",
+          "primarySport": "Pickleball",
+          "sportProfiles": [
+            {
+              "availability": null,
+              "homeCourt": null,
+              "homeCourtId": null,
+              "homeCourtName": null,
+              "ntrp": "3.5",
+              "sport": "Pickleball"
+            }
+          ]
+        },
+        {
+          "availability": [],
+          "avatarColor": null,
+          "avatarFg": null,
+        ... (74 more lines)
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 34: Admin lists the trust & safety report queue (read-only)
+==============================================================================
+  GET /api/admin/reports   ->  HTTP 200
+  response body:
+    {
+      "openCount": 1,
+      "reports": [
+        {
+          "createdAt": "2026-07-15T15:50:16.666529",
+          "details": "Booked a game then never showed.",
+          "id": 1,
+          "reason": "no_show",
+          "reported": {
+            "email": "casey@rally.app",
+            "handle": "@caseynguyen",
+            "id": 3,
+            "name": "Casey Nguyen"
+          },
+          "reportedIsActive": true,
+          "reporter": {
+            "email": "alex@rally.app",
+            "handle": "@alex",
+            "id": 1,
+            "name": "Alex Rivera"
+          },
+          "resolutionNote": null,
+          "resolvedAt": null,
+          "resolvedBy": null,
+          "status": "open"
+        }
+      ]
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+
+==============================================================================
+STEP 35: Admin reviews the report + suspends the account (UPDATE user_reports + users.is_active)
+==============================================================================
+  PATCH /api/admin/reports/1   ->  HTTP 200
+  request body:
+    {
+      "status": "reviewed",
+      "note": "Confirmed no-show pattern.",
+      "suspend": true
+    }
+  response body:
+    {
+      "report": {
+        "createdAt": "2026-07-15T15:50:16.666529",
+        "details": "Booked a game then never showed.",
+        "id": 1,
+        "reason": "no_show",
+        "reported": {
+          "email": "casey@rally.app",
+          "handle": "@caseynguyen",
+          "id": 3,
+          "name": "Casey Nguyen"
+        },
+        "reportedIsActive": false,
+        "reporter": {
+          "email": "alex@rally.app",
+          "handle": "@alex",
+          "id": 1,
+          "name": "Alex Rivera"
+        },
+        "resolutionNote": "Confirmed no-show pattern.",
+        "resolvedAt": "2026-07-15T15:50:17.130630",
+        "resolvedBy": {
+          "email": "alex@rally.app",
+          "handle": "@alex",
+          "id": 1,
+          "name": "Alex Rivera"
+        },
+        "status": "reviewed"
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'status': 'open', 'reported_is_active': 1}
+  ROW AFTER:  {'id': 1, 'status': 'reviewed', 'reported_is_active': 0}
+
+==============================================================================
+STEP 36: Admin closes the support ticket (UPDATE support_tickets status)
+==============================================================================
+  PATCH /api/admin/support/1   ->  HTTP 200
+  request body:
+    {
+      "status": "closed",
+      "note": "Explained the fix over email."
+    }
+  response body:
+    {
+      "ticket": {
+        "createdAt": "2026-07-15T15:50:17.087496",
+        "history": [],
+        "id": 1,
+        "message": "I can't change my home court \u2014 is that a bug?",
+        "resolutionNote": "Explained the fix over email.",
+        "resolvedAt": "2026-07-15T15:50:17.149547",
+        "resolvedBy": {
+          "id": 1,
+          "name": "Alex Rivera"
+        },
+        "status": "closed",
+        "user": {
+          "email": "alex@rally.app",
+          "handle": "@alex",
+          "id": 1,
+          "name": "Alex Rivera"
+        }
+      }
+    }
+  DB DELTA: (no row-count change — in-place UPDATE or read-only)
+  ROW BEFORE: {'id': 1, 'status': 'open', 'resolution_note': None}
+  ROW AFTER:  {'id': 1, 'status': 'closed', 'resolution_note': 'Explained the fix over email.'}
+
+==============================================================================
+FINAL DB STATE
+==============================================================================
+  users                        3
+  sport_profiles               3
+  availability_slots           3
+  courts                       1
+  court_favorites              1
+  court_checkins               0
+  court_appointments           1
+  appointment_participants     2
+  saved_players                0
+  sessions                     2
+  game_invites                 1
+  time_proposals               2
+  ai_match_logs                1
+  user_reports                 1
+  support_tickets              1
+
+Total API calls exercised: 36
+Demo complete — every write above shows its database delta inline.

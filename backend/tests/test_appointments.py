@@ -1,8 +1,13 @@
 """
 Tests for court appointments (open games), the waitlist queue, and check-ins.
 """
+from datetime import datetime, timedelta
+
 from extensions import db
 from models import Court
+
+# Relative to now so the future-time validation keeps passing over time.
+_FUTURE = (datetime.utcnow() + timedelta(days=30)).replace(microsecond=0).isoformat()
 
 
 def _signup(client, email):
@@ -23,7 +28,7 @@ def _make_court(app, slug="grant-park"):
 
 def _create(client, headers, max_players=2):
     r = client.post("/api/courts/grant-park/appointments", headers=headers,
-                    json={"sport": "Tennis", "scheduledAt": "2026-09-01T18:00:00", "maxPlayers": max_players})
+                    json={"sport": "Tennis", "scheduledAt": _FUTURE, "maxPlayers": max_players})
     assert r.status_code == 201, r.get_json()
     return r.get_json()["appointment"]
 
