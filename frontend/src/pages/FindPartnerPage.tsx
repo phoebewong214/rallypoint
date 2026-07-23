@@ -9,6 +9,7 @@ import { PlayerCardSkeleton } from "../components/Skeleton";
 import { useSessions } from "../hooks/useSessions";
 import { useCreateInvite, useInvites } from "../hooks/useInvites";
 import { ScheduleModal } from "../components/ScheduleModal";
+import { UpcomingDatesStrip } from "../components/UpcomingDates";
 import { ReportPlayerModal } from "../components/ReportPlayerModal";
 import { CourtMultiSelect } from "../components/CourtMultiSelect";
 import { TimeBandMultiSelect } from "../components/TimeBandMultiSelect";
@@ -381,35 +382,6 @@ function FilterBar({ filters, setFilters, courtOptions }) {
 
 const TIER_LABEL: Record<string, string> = { great: "Great match", good: "Good match", fair: "Worth a try" };
 
-const PREF_DOW = ["M", "T", "W", "T", "F", "S", "S"];
-const PREF_BANDS = ["MORN", "AFT", "EVE"];
-
-/* Compact read-only view of a player's preferred-times grid (set on their
-   Profile). Hidden entirely when they haven't marked any availability. */
-function PrefTimesMini({ slots }: { slots?: { dayOfWeek: number; timeBand: string; status: number }[] }) {
-  const map: Record<string, number> = {};
-  (slots ?? []).forEach((s) => { map[`${s.timeBand}-${s.dayOfWeek}`] = s.status; });
-  if (!(slots ?? []).some((s) => s.status > 0)) return null;
-  return (
-    <div className="pref-mini" aria-label="Preferred times">
-      <div className="pref-mini-title"><Icon name="clock" size={11} /> Preferred times</div>
-      <div className="pref-mini-grid">
-        <span />
-        {PREF_DOW.map((d, i) => <span key={i} className="pref-mini-dow">{d}</span>)}
-        {PREF_BANDS.map((band) => (
-          <React.Fragment key={band}>
-            <span className="pref-mini-band">{band[0]}</span>
-            {[0, 1, 2, 3, 4, 5, 6].map((day) => {
-              const v = map[`${band}-${day}`] ?? 0;
-              return <span key={day} className={"pref-mini-cell" + (v === 2 ? " on" : v === 1 ? " half" : "")} />;
-            })}
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
   // Cards start collapsed: just who they are + the AI-match line, so more
   // matches fit on screen. Expanding reveals the full profile — location,
@@ -484,7 +456,7 @@ function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
             </div>
           </div>
 
-          <PrefTimesMini slots={player.availabilitySlots} />
+          <UpcomingDatesStrip slots={player.availabilitySlots} />
 
           {hasWhy && (
             <div className="match-box">
@@ -936,6 +908,8 @@ function FindPartnerPage() {
           allowCourt
           courtOptions={courtsData?.courts ?? []}
           defaultCourt={courtSlug ?? null}
+          partnerName={requestTarget.name}
+          partnerSlots={requestTarget.availabilitySlots}
           busy={createInvite.isPending}
           onSubmit={confirmRequest}
           onClose={() => setRequestTarget(null)}
