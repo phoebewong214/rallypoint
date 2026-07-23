@@ -1,3 +1,4 @@
+import datetime as dt
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
@@ -17,6 +18,12 @@ class AvailabilityInput(BaseModel):
     status: int = Field(ge=0, le=2)
 
 
+class AvailabilityOverrideInput(BaseModel):
+    date: dt.date
+    timeBand: Literal["MORN", "AFT", "EVE"]
+    status: int = Field(ge=0, le=2)
+
+
 class UpdateProfileSchema(BaseModel):
     """Partial profile update — every field optional, only sent ones touched.
     sportProfiles, when sent, is the complete desired set (the primary sport's
@@ -30,3 +37,5 @@ class UpdateProfileSchema(BaseModel):
     primarySport: Optional[str] = Field(default=None, pattern=r"^(Tennis|Pickleball)$")
     sportProfiles: Optional[list[SportProfileInput]] = None
     availability: Optional[list[AvailabilityInput]] = None
+    # When sent, replaces the whole set of date-specific tweaks (like the grid).
+    availabilityOverrides: Optional[list[AvailabilityOverrideInput]] = None

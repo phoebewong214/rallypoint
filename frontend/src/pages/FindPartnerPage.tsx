@@ -456,7 +456,7 @@ function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
             </div>
           </div>
 
-          <UpcomingDatesStrip slots={player.availabilitySlots} />
+          <UpcomingDatesStrip slots={player.availabilitySlots} overrides={player.availabilityOverrides} />
 
           {hasWhy && (
             <div className="match-box">
@@ -632,6 +632,7 @@ function FindPartnerPage() {
           online: p.online, location: p.location, distance: p.distance,
           sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
           availabilitySlots: p.availabilitySlots ?? [],
+          availabilityOverrides: p.availabilityOverrides ?? [],
           matchScore: p.matchScore, matchTier: p.matchTier, matchReasons: p.matchReasons, reason: p.reason, saved: p.saved,
           altSport: altProf ? { sport: otherSportLabel, ntrp: altProf.ntrp } : null,
         };
@@ -910,6 +911,7 @@ function FindPartnerPage() {
           defaultCourt={courtSlug ?? null}
           partnerName={requestTarget.name}
           partnerSlots={requestTarget.availabilitySlots}
+          partnerOverrides={requestTarget.availabilityOverrides}
           busy={createInvite.isPending}
           onSubmit={confirmRequest}
           onClose={() => setRequestTarget(null)}

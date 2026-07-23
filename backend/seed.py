@@ -4,12 +4,12 @@ to render every page meaningfully.
 
 Run:  python seed.py
 """
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from app import create_app
 from extensions import db
 from models import (
     User, SportProfile, Court, Session, SessionStatus,
-    AvailabilitySlot,
+    AvailabilitySlot, AvailabilityOverride,
 )
 
 
@@ -91,6 +91,16 @@ def _seed():
             if status:
                 db.session.add(AvailabilitySlot(user_id=alex.id, day_of_week=dow,
                                                 time_band=band, status=status))
+
+    # Date-specific tweaks on top of the grid: busy the coming Saturday morning
+    # (normally free), but free two Mondays out in the evening (normally not).
+    today = date.today()
+    next_sat = today + timedelta(days=(5 - today.weekday()) % 7 or 7)
+    monday_after = today + timedelta(days=(0 - today.weekday()) % 7 or 7, weeks=1)
+    db.session.add(AvailabilityOverride(user_id=alex.id, date=next_sat,
+                                        time_band="MORN", status=0))
+    db.session.add(AvailabilityOverride(user_id=alex.id, date=monday_after,
+                                        time_band="EVE", status=2))
 
     # Sessions
     now = datetime.utcnow()

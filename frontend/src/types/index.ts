@@ -23,6 +23,13 @@ export interface AvailabilitySlotDTO {
   status: number;
 }
 
+/** A date-specific tweak layered over the weekly grid (date is YYYY-MM-DD). */
+export interface AvailabilityOverrideDTO {
+  date: string;
+  timeBand: string;
+  status: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -42,6 +49,7 @@ export interface User {
   avatarFg?: string;
   sportProfiles?: UserSportProfile[];
   availability?: AvailabilitySlotDTO[];
+  availabilityOverrides?: AvailabilityOverrideDTO[];
 }
 
 export interface SportProfile {
@@ -67,6 +75,7 @@ export interface Player {
   ntrp?: string;
   availability?: string;
   availabilitySlots?: AvailabilitySlotDTO[];
+  availabilityOverrides?: AvailabilityOverrideDTO[];
   matchScore?: number;
   matchTier?: "great" | "good" | "fair";
   matchReasons?: string[];

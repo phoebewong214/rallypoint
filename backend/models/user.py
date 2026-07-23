@@ -2,7 +2,7 @@
 User + per-sport profile (one user can have multiple SportProfile rows,
 one per sport they play).
 """
-from datetime import datetime
+from datetime import date, datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 
@@ -45,6 +45,9 @@ class User(db.Model):
     )
     availability = db.relationship(
         "AvailabilitySlot", back_populates="user", cascade="all, delete-orphan"
+    )
+    availability_overrides = db.relationship(
+        "AvailabilityOverride", back_populates="user", cascade="all, delete-orphan"
     )
 
     def set_password(self, password: str) -> None:
@@ -94,6 +97,11 @@ class User(db.Model):
             "joined": self.created_at.strftime("%b %Y") if self.created_at else None,
             "sportProfiles": [p.to_dict() for p in self.sport_profiles],
             "availability": [s.to_dict() for s in self.availability],
+            # Past-date overrides are dead weight — never serialize them.
+            "availabilityOverrides": sorted(
+                (o.to_dict() for o in self.availability_overrides if o.date >= date.today()),
+                key=lambda o: (o["date"], o["timeBand"]),
+            ),
         }
         if with_email:
             out["email"] = self.email
