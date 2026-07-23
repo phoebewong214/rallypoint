@@ -3,6 +3,8 @@ import { Icon } from "../rally-shared";
 import { Spinner } from "./Skeleton";
 import { Modal } from "./Modal";
 import { CourtPicker } from "./CourtPicker";
+import { UpcomingDatesStrip, freeBandsLabel } from "./UpcomingDates";
+import type { AvailabilitySlotDTO } from "../types";
 import type { ApiCourt } from "../api/courts";
 
 /* Pick a time for a game (+ optional note). Used three ways:
@@ -38,6 +40,8 @@ export function ScheduleModal({
   allowCourt = false,
   courtOptions = [],
   defaultCourt,
+  partnerName,
+  partnerSlots,
   onSubmit,
   onClose,
 }: {
@@ -55,6 +59,10 @@ export function ScheduleModal({
   allowCourt?: boolean;
   courtOptions?: ApiCourt[];
   defaultCourt?: string | null;
+  // The other player's weekly availability, projected onto real dates so the
+  // picker isn't a blind guess. Tapping a date fills the input's date part.
+  partnerName?: string;
+  partnerSlots?: AvailabilitySlotDTO[];
   onSubmit: (startISO: string, endISO: string | null, note?: string, court?: string | null) => void;
   onClose: () => void;
 }) {
@@ -75,6 +83,20 @@ export function ScheduleModal({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const windowInvalid = mode === "window" && new Date(end) <= new Date(start);
+
+  // Partner availability, keyed off the currently picked date.
+  const hasPartnerTimes = (partnerSlots ?? []).some((s) => s.status > 0);
+  const pickedDate = start.slice(0, 10);
+  const partnerHint = hasPartnerTimes ? freeBandsLabel(partnerSlots, pickedDate) : null;
+  const pickDate = (iso: string) => {
+    const newStart = `${iso}T${start.slice(11) || "18:00"}`;
+    setStart(newStart);
+    if (new Date(end) <= new Date(newStart)) {
+      const e = new Date(newStart);
+      e.setHours(e.getHours() + 2);
+      setEnd(toLocalInput(e));
+    }
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +141,15 @@ export function ScheduleModal({
           </div>
         )}
 
+        {hasPartnerTimes && (
+          <UpcomingDatesStrip
+            slots={partnerSlots}
+            title={`When ${partnerName ?? "they"}'s usually free — tap a date`}
+            selectedISO={pickedDate}
+            onPickDate={pickDate}
+          />
+        )}
+
         <div className="field">
           <label className="field-label" htmlFor="sched-when">
             <Icon name="calendar" size={13} /> {mode === "window" ? "Window starts" : "Date & time"}
@@ -134,6 +165,13 @@ export function ScheduleModal({
             onChange={(e) => setStart(e.target.value)}
             required
           />
+          {hasPartnerTimes && (
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-dim)" }}>
+              {partnerHint
+                ? <>{partnerName ?? "They"} is usually free that day: <b style={{ color: "var(--green-text)" }}>{partnerHint}</b>.</>
+                : <>{partnerName ?? "They"} hasn't marked that day as free — they can still accept.</>}
+            </p>
+          )}
         </div>
 
         {mode === "window" && (

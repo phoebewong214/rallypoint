@@ -2151,6 +2151,53 @@ textarea:focus-visible,
 .pref-mini-cell.on { background: var(--green); border-color: var(--green-deep); }
 .pref-mini-cell.half { background: var(--green-soft); border-color: var(--green); }
 
+/* Upcoming-dates strip: the weekly grid projected onto the next real dates.
+   One column per day (dow, date number, 3 band cells); scrolls horizontally. */
+.updays { margin-top: 4px; }
+.updays-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin: 0 -2px;
+  padding: 2px;
+}
+.updays-strip { display: flex; gap: 3px; min-width: max-content; }
+.updays-day {
+  display: grid;
+  gap: 3px;
+  min-width: 30px;
+  padding: 4px 3px 3px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+.updays-day.today { background: var(--bg-2); border-color: var(--border); }
+button.updays-day { cursor: pointer; }
+button.updays-day:hover { border-color: var(--green); }
+.updays-day.selected,
+button.updays-day.selected:hover {
+  background: var(--green-soft);
+  border-color: var(--green-deep);
+}
+.updays-dow {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-low);
+  text-align: center;
+  text-transform: uppercase;
+}
+.updays-date {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1;
+}
+.updays-day.selected .updays-date { color: var(--green-text); }
+.updays-day .pref-mini-cell { height: 8px; }
+
 /* Profile games timetable section labels + upcoming accent */
 .agenda-label {
   font-size: 11px;
