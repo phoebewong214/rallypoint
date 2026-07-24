@@ -122,3 +122,53 @@ def test_set_and_replace_availability(client):
     # replace semantics: sending an empty grid clears it
     r2 = client.patch("/api/auth/me", headers=h, json={"availability": []})
     assert r2.get_json()["user"]["availability"] == []
+
+
+def test_set_replace_and_expire_availability_overrides(client):
+    from datetime import date, timedelta
+    tok, _ = _signup(client, "ovr@rally.app")
+    h = _h(tok)
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    next_week = (date.today() + timedelta(days=7)).isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    # Two future tweaks stored (status 0 included — "busy that day" matters);
+    # the past date is silently dropped.
+    r = client.patch("/api/auth/me", headers=h, json={"availabilityOverrides": [
+        {"date": tomorrow, "timeBand": "MORN", "status": 0},
+        {"date": next_week, "timeBand": "EVE", "status": 2},
+        {"date": yesterday, "timeBand": "AFT", "status": 1},
+    ]})
+    assert r.status_code == 200, r.get_json()
+    got = [(o["date"], o["timeBand"], o["status"]) for o in r.get_json()["user"]["availabilityOverrides"]]
+    assert got == [(tomorrow, "MORN", 0), (next_week, "EVE", 2)]
+
+    # Replace-all semantics, like the weekly grid.
+    r2 = client.patch("/api/auth/me", headers=h, json={"availabilityOverrides": [
+        {"date": next_week, "timeBand": "MORN", "status": 1},
+    ]})
+    got2 = [(o["date"], o["timeBand"], o["status"]) for o in r2.get_json()["user"]["availabilityOverrides"]]
+    assert got2 == [(next_week, "MORN", 1)]
+
+    # Omitting the field leaves the stored tweaks untouched.
+    r3 = client.patch("/api/auth/me", headers=h, json={"bio": "hi"})
+    assert len(r3.get_json()["user"]["availabilityOverrides"]) == 1
+
+    # Bad band rejected by the schema.
+    r4 = client.patch("/api/auth/me", headers=h, json={"availabilityOverrides": [
+        {"date": tomorrow, "timeBand": "NIGHT", "status": 2},
+    ]})
+    assert r4.status_code == 422
+
+
+def test_overrides_surface_in_players_payload(client):
+    from datetime import date, timedelta
+    tok_a, _ = _signup(client, "ovra@rally.app", sport="Tennis", ntrp="4.0")
+    tok_b, bid = _signup(client, "ovrb@rally.app", sport="Tennis", ntrp="4.0")
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    client.patch("/api/auth/me", headers=_h(tok_b), json={"availabilityOverrides": [
+        {"date": tomorrow, "timeBand": "EVE", "status": 2},
+    ]})
+    row = next(p for p in client.get("/api/players?sport=Tennis", headers=_h(tok_a)).get_json()["players"]
+               if p["id"] == bid)
+    assert row["availabilityOverrides"] == [{"date": tomorrow, "timeBand": "EVE", "status": 2}]

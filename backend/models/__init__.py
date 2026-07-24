@@ -10,7 +10,7 @@ from .court_appointment import CourtAppointment, AppointmentParticipant  # noqa:
 from .court_checkin import CourtCheckIn  # noqa: F401
 from .session_model import Session, SessionStatus, SessionBucket  # noqa: F401
 from .game_invite import GameInvite, TimeProposal  # noqa: F401
-from .availability import AvailabilitySlot  # noqa: F401
+from .availability import AvailabilitySlot, AvailabilityOverride  # noqa: F401
 from .ai_match_log import AIMatchLog  # noqa: F401
 from .report import UserReport  # noqa: F401
 from .support_ticket import SupportTicket  # noqa: F401

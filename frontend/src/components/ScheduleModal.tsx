@@ -4,7 +4,7 @@ import { Spinner } from "./Skeleton";
 import { Modal } from "./Modal";
 import { CourtPicker } from "./CourtPicker";
 import { UpcomingDatesStrip, freeBandsLabel } from "./UpcomingDates";
-import type { AvailabilitySlotDTO } from "../types";
+import type { AvailabilitySlotDTO, AvailabilityOverrideDTO } from "../types";
 import type { ApiCourt } from "../api/courts";
 
 /* Pick a time for a game (+ optional note). Used three ways:
@@ -42,6 +42,7 @@ export function ScheduleModal({
   defaultCourt,
   partnerName,
   partnerSlots,
+  partnerOverrides,
   onSubmit,
   onClose,
 }: {
@@ -59,10 +60,11 @@ export function ScheduleModal({
   allowCourt?: boolean;
   courtOptions?: ApiCourt[];
   defaultCourt?: string | null;
-  // The other player's weekly availability, projected onto real dates so the
-  // picker isn't a blind guess. Tapping a date fills the input's date part.
+  // The other player's weekly availability (+ date tweaks), projected onto real
+  // dates so the picker isn't a blind guess. Tapping a date fills the input.
   partnerName?: string;
   partnerSlots?: AvailabilitySlotDTO[];
+  partnerOverrides?: AvailabilityOverrideDTO[];
   onSubmit: (startISO: string, endISO: string | null, note?: string, court?: string | null) => void;
   onClose: () => void;
 }) {
@@ -85,9 +87,11 @@ export function ScheduleModal({
   const windowInvalid = mode === "window" && new Date(end) <= new Date(start);
 
   // Partner availability, keyed off the currently picked date.
-  const hasPartnerTimes = (partnerSlots ?? []).some((s) => s.status > 0);
+  const hasPartnerTimes =
+    (partnerSlots ?? []).some((s) => s.status > 0) ||
+    (partnerOverrides ?? []).some((o) => o.status > 0);
   const pickedDate = start.slice(0, 10);
-  const partnerHint = hasPartnerTimes ? freeBandsLabel(partnerSlots, pickedDate) : null;
+  const partnerHint = hasPartnerTimes ? freeBandsLabel(partnerSlots, pickedDate, partnerOverrides) : null;
   const pickDate = (iso: string) => {
     const newStart = `${iso}T${start.slice(11) || "18:00"}`;
     setStart(newStart);
@@ -144,6 +148,7 @@ export function ScheduleModal({
         {hasPartnerTimes && (
           <UpcomingDatesStrip
             slots={partnerSlots}
+            overrides={partnerOverrides}
             title={`When ${partnerName ?? "they"}'s usually free — tap a date`}
             selectedISO={pickedDate}
             onPickDate={pickDate}

@@ -7,6 +7,7 @@ GET  /api/auth/me      cookie: rp_session (or Authorization: Bearer <jwt>)
 """
 import json
 import re
+from datetime import date as dt_date
 from flask import Blueprint, jsonify, request, current_app, make_response
 from flask_limiter.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
-from models import User, SportProfile, Court, AvailabilitySlot
+from models import User, SportProfile, Court, AvailabilitySlot, AvailabilityOverride
 from services.embeddings import embed_text
 from schemas import (
     LoginSchema,
@@ -264,6 +265,18 @@ def update_me():
                 db.session.add(AvailabilitySlot(
                     user_id=user.id, day_of_week=slot.dayOfWeek,
                     time_band=slot.timeBand, status=slot.status,
+                ))
+    if data.availabilityOverrides is not None:
+        # Replace the whole set of date tweaks. Unlike the grid, status 0 is
+        # meaningful here ("busy THIS Saturday" over a free weekly slot), so
+        # every sent cell is stored. Dropping past dates doubles as cleanup.
+        today = dt_date.today()
+        AvailabilityOverride.query.filter_by(user_id=user.id).delete()
+        for ovr in data.availabilityOverrides:
+            if ovr.date >= today:
+                db.session.add(AvailabilityOverride(
+                    user_id=user.id, date=ovr.date,
+                    time_band=ovr.timeBand, status=ovr.status,
                 ))
     db.session.commit()
     return jsonify({"user": user.to_dict(with_email=True)})

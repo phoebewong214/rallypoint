@@ -9,8 +9,9 @@ import { useSavedPlayers, useToggleSavedPlayer } from "../hooks/useSavedPlayers"
 import { Spinner } from "../components/Skeleton";
 import { CourtPicker } from "../components/CourtPicker";
 import { NeighborhoodSelect } from "../components/NeighborhoodSelect";
+import { UpcomingTweaksEditor } from "../components/UpcomingDates";
 import type { ApiCourt } from "../api/courts";
-import type { Sport } from "../types";
+import type { Sport, AvailabilityOverrideDTO } from "../types";
 
 const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
 const AVAIL_BANDS = ["MORN", "AFT", "EVE"];
@@ -255,6 +256,26 @@ function ProfilePage() {
       show(err?.message || "Couldn't save availability", "error");
     } finally {
       setSavingAvail(false);
+    }
+  };
+
+  // Date-specific tweaks over the weekly grid ("busy THIS Saturday"). Edits
+  // build in a draft and save in one PATCH, so quick taps never race requests.
+  const ovrSaved = authUser?.availabilityOverrides ?? [];
+  const [ovrDraft, setOvrDraft] = useState<AvailabilityOverrideDTO[] | null>(null);
+  const [savingOvr, setSavingOvr] = useState(false);
+  const ovrValue = ovrDraft ?? ovrSaved;
+  const saveOvr = async () => {
+    if (!ovrDraft) return;
+    setSavingOvr(true);
+    try {
+      await updateProfile({ availabilityOverrides: ovrDraft });
+      setOvrDraft(null);
+      show("Date tweaks saved", "success");
+    } catch (err: any) {
+      show(err?.message || "Couldn't save date tweaks", "error");
+    } finally {
+      setSavingOvr(false);
     }
   };
 
@@ -505,6 +526,38 @@ function ProfilePage() {
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--green)", borderRadius: 3 }} /> Available</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, background: "var(--green-soft)", border: "1px solid var(--green)", borderRadius: 3 }} /> Maybe</span>
                 {editAvail && <span style={{ marginLeft: "auto" }}>Tap cells to cycle</span>}
+              </div>
+
+              {/* Date-specific tweaks: the weekly pattern walked over the next
+                  two weeks; tap any cell to override just that date. */}
+              <div style={{ borderTop: "1px solid var(--border)", marginTop: 14, paddingTop: 12 }}>
+                <div className="panel-head" style={{ marginBottom: 8 }}>
+                  <div className="pref-mini-title" style={{ marginBottom: 0 }}>
+                    <Icon name="calendar" size={11} /> Next 2 weeks — tap a cell to tweak a date
+                  </div>
+                  {ovrDraft ? (
+                    <span style={{ display: "inline-flex", gap: 8 }}>
+                      <button className="panel-action" type="button" onClick={() => setOvrDraft(null)} disabled={savingOvr}>
+                        Cancel
+                      </button>
+                      <button className="panel-action" type="button" onClick={saveOvr} disabled={savingOvr}>
+                        {savingOvr ? "Saving…" : "Save"}
+                      </button>
+                    </span>
+                  ) : ovrValue.length > 0 ? (
+                    <button className="panel-action" type="button" onClick={() => setOvrDraft([])} title="Remove every date tweak">
+                      Reset
+                    </button>
+                  ) : null}
+                </div>
+                <UpcomingTweaksEditor
+                  slots={authUser?.availability}
+                  value={ovrValue}
+                  onChange={setOvrDraft}
+                />
+                <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--text-low)", fontWeight: 600 }}>
+                  Dotted cells differ from your weekly pattern for that date only. Partners see these on Find Partner.
+                </p>
               </div>
             </div>
 

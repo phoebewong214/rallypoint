@@ -8,6 +8,8 @@ Query params:
     courts    comma-separated court slugs — only players whose home court (for
               this sport) is one of them (default: any)
 """
+from datetime import date as dt_date
+
 from flask import Blueprint, request, jsonify
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -68,7 +70,8 @@ def list_players():
     # fire a SELECT (was an N+1 over the whole candidate pool).
     candidates_q = (
         db.session.query(User)
-        .options(selectinload(User.sport_profiles), selectinload(User.availability))
+        .options(selectinload(User.sport_profiles), selectinload(User.availability),
+                 selectinload(User.availability_overrides))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
         .filter(User.is_active.is_(True))  # suspended accounts never surface as partners
@@ -127,6 +130,9 @@ def list_players():
                 "ntrp": cand_profile.ntrp,
                 "availability": cand_profile.availability_summary,
                 "availabilitySlots": [s.to_dict() for s in cand.availability],
+                # Date-specific tweaks layered on the grid client-side.
+                "availabilityOverrides": [o.to_dict() for o in cand.availability_overrides
+                                          if o.date >= dt_date.today()],
                 "saved": cand.id in saved_ids,
             }
         )
