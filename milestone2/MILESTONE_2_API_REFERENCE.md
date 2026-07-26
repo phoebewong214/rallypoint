@@ -61,7 +61,7 @@ a structured, field-level error instead of a 500:
 
 ---
 
-## 2. Endpoint index (55 routes across 9 blueprints)
+## 2. Endpoint index (60 routes: 59 across 9 blueprints + health)
 
 | # | Method | Path | Auth | Purpose |
 |---|---|---|---|---|
@@ -72,65 +72,69 @@ a structured, field-level error instead of a 500:
 | 3 | POST | `/api/auth/login` | — | Authenticate → JWT (10/min per IP) |
 | 4 | GET | `/api/auth/me` | 🔒 | Current user |
 | 5 | PATCH | `/api/auth/me` | 🔒 | Update profile / sports / availability |
-| 6 | POST | `/api/auth/logout` | — | Clear auth cookies |
-| 7 | POST | `/api/auth/logout-all` | 🔒 | Revoke every token (bump token_version) |
-| 8 | POST | `/api/auth/verify-email` | — | Confirm email from link token |
-| 9 | POST | `/api/auth/resend-verification` | 🔒 | Re-send the verification email |
-| 10 | POST | `/api/auth/forgot-password` | — | Request a reset email (no enumeration) |
-| 11 | POST | `/api/auth/reset-password` | — | Set new password from reset token |
+| 6 | PUT | `/api/auth/me/photo` | 🔒 | Upload / replace profile photo (data URL) |
+| 7 | DELETE | `/api/auth/me/photo` | 🔒 | Remove own photo (back to initials) |
+| 8 | POST | `/api/auth/logout` | — | Clear auth cookies |
+| 9 | POST | `/api/auth/logout-all` | 🔒 | Revoke every token (bump token_version) |
+| 10 | POST | `/api/auth/verify-email` | — | Confirm email from link token |
+| 11 | POST | `/api/auth/resend-verification` | 🔒 | Re-send the verification email |
+| 12 | POST | `/api/auth/forgot-password` | — | Request a reset email (no enumeration) |
+| 13 | POST | `/api/auth/reset-password` | — | Set new password from reset token |
 | | | **Players / Matching** (`routes/players.py`) | | |
-| 12 | GET | `/api/players` | 🔒 | AI-ranked partner list (+ reason chips) |
-| 13 | GET | `/api/players/saved` | 🔒 | The viewer's saved players |
-| 14 | POST | `/api/players/<id>/save` | 🔒 | Bookmark a player |
-| 15 | DELETE | `/api/players/<id>/save` | 🔒 | Un-bookmark a player |
-| 16 | POST | `/api/players/<id>/report` | 🔒 | File a trust & safety report |
+| 14 | GET | `/api/players` | 🔒 | AI-ranked partner list (+ reason chips) |
+| 15 | GET | `/api/players/saved` | 🔒 | The viewer's saved players |
+| 16 | GET | `/api/players/<id>/photo` | — | Profile photo bytes (public; suspended → 404) |
+| 17 | POST | `/api/players/<id>/save` | 🔒 | Bookmark a player |
+| 18 | DELETE | `/api/players/<id>/save` | 🔒 | Un-bookmark a player |
+| 19 | POST | `/api/players/<id>/report` | 🔒 | File a trust & safety report |
 | | | **AI** (`routes/ai.py`) | | |
-| 17 | POST | `/api/ai/match-reason` | 🔒 | On-demand match reason (cached) |
+| 20 | POST | `/api/ai/match-reason` | 🔒 | On-demand match reason (cached) |
 | | | **Sessions** (`routes/sessions.py`) | | |
-| 18 | GET | `/api/sessions` | 🔒 | Games bucketed upcoming/requests/past |
-| 19 | POST | `/api/sessions` | 🔒 | Request a game |
-| 20 | POST | `/api/sessions/<id>/accept` | 🔒 | Guest confirms |
-| 21 | POST | `/api/sessions/<id>/decline` | 🔒 | Guest declines |
-| 22 | POST | `/api/sessions/<id>/cancel` | 🔒 | Either party cancels |
-| 23 | POST | `/api/sessions/<id>/reschedule` | 🔒 | Propose a new time (re-opens) |
+| 21 | GET | `/api/sessions` | 🔒 | Games bucketed upcoming/requests/past |
+| 22 | POST | `/api/sessions` | 🔒 | Request a game |
+| 23 | POST | `/api/sessions/<id>/accept` | 🔒 | Guest confirms |
+| 24 | POST | `/api/sessions/<id>/decline` | 🔒 | Guest declines |
+| 25 | POST | `/api/sessions/<id>/cancel` | 🔒 | Either party cancels |
+| 26 | POST | `/api/sessions/<id>/reschedule` | 🔒 | Propose a new time (re-opens) |
 | | | **Courts** (`routes/courts.py`) | | |
-| 24 | GET | `/api/courts` | 🔒 | Courts + distance + activity |
-| 25 | GET | `/api/courts/<slug>` | 🔒 | Single court + open games |
-| 26 | POST | `/api/courts/<slug>/favorite` | 🔒 | Favorite a court |
-| 27 | DELETE | `/api/courts/<slug>/favorite` | 🔒 | Un-favorite a court |
+| 27 | GET | `/api/courts` | 🔒 | Courts + distance + activity |
+| 28 | GET | `/api/courts/<slug>` | 🔒 | Single court + open games |
+| 29 | POST | `/api/courts/<slug>/favorite` | 🔒 | Favorite a court |
+| 30 | DELETE | `/api/courts/<slug>/favorite` | 🔒 | Un-favorite a court |
 | | | **Appointments / Check-ins** (`routes/appointments.py`) | | |
-| 28 | POST | `/api/courts/<slug>/appointments` | 🔒 | Create an open game |
-| 29 | POST | `/api/courts/<slug>/checkin` | 🔒 | "I'm here now" (~2h) |
-| 30 | DELETE | `/api/courts/<slug>/checkin` | 🔒 | Check out |
-| 31 | POST | `/api/appointments/<id>/join` | 🔒 | Join (or waitlist if full) |
-| 32 | POST | `/api/appointments/<id>/leave` | 🔒 | Leave (promotes next in queue) |
-| 33 | DELETE | `/api/appointments/<id>` | 🔒 | Host cancels the open game |
+| 31 | POST | `/api/courts/<slug>/appointments` | 🔒 | Create an open game |
+| 32 | POST | `/api/courts/<slug>/checkin` | 🔒 | "I'm here now" (~2h) |
+| 33 | DELETE | `/api/courts/<slug>/checkin` | 🔒 | Check out |
+| 34 | POST | `/api/appointments/<id>/join` | 🔒 | Join (or waitlist if full) |
+| 35 | POST | `/api/appointments/<id>/leave` | 🔒 | Leave (promotes next in queue) |
+| 36 | DELETE | `/api/appointments/<id>` | 🔒 | Host cancels the open game |
 | | | **Invites** (two-phase) (`routes/invites.py`) | | |
-| 34 | GET | `/api/invites` | 🔒 | The viewer's open invites |
-| 35 | POST | `/api/invites` | 🔒 | Create an invite (+ opening time) |
-| 36 | POST | `/api/invites/<id>/confirm-opponent` | 🔒 | Invitee agrees to play |
-| 37 | POST | `/api/invites/<id>/propose-time` | 🔒 | Offer / counter a time |
-| 38 | POST | `/api/invites/<id>/accept-time` | 🔒 | Accept the time → materialize session |
-| 39 | POST | `/api/invites/<id>/decline` | 🔒 | Invitee declines |
-| 40 | POST | `/api/invites/<id>/cancel` | 🔒 | Either party calls it off |
+| 37 | GET | `/api/invites` | 🔒 | The viewer's open invites |
+| 38 | POST | `/api/invites` | 🔒 | Create an invite (+ opening time) |
+| 39 | POST | `/api/invites/<id>/confirm-opponent` | 🔒 | Invitee agrees to play |
+| 40 | POST | `/api/invites/<id>/propose-time` | 🔒 | Offer / counter a time |
+| 41 | POST | `/api/invites/<id>/accept-time` | 🔒 | Accept the time → materialize session |
+| 42 | POST | `/api/invites/<id>/decline` | 🔒 | Invitee declines |
+| 43 | POST | `/api/invites/<id>/cancel` | 🔒 | Either party calls it off |
 | | | **Support** (`routes/support.py`) | | |
-| 41 | POST | `/api/support/chat` | 🔒 | Ask the AI support assistant |
-| 42 | POST | `/api/support/escalate` | 🔒 | "Talk to a human" → ticket |
+| 44 | POST | `/api/support/chat` | 🔒 | Ask the AI support assistant |
+| 45 | POST | `/api/support/escalate` | 🔒 | "Talk to a human" → ticket |
 | | | **Admin** (`routes/admin.py`) | | |
-| 43 | GET | `/api/admin/overview` | 🛡 | Ops dashboard aggregate |
-| 44 | GET | `/api/admin/stats` | 🛡 | Headline counts |
-| 45 | GET | `/api/admin/users` | 🛡 | Paged, filterable user list |
-| 46 | GET | `/api/admin/users/<id>` | 🛡 | One user (full record) |
-| 47 | PATCH | `/api/admin/users/<id>` | 🛡 | Edit user / ratings / suspend |
-| 48 | DELETE | `/api/admin/users/<id>` | 🛡 | Delete an account |
-| 49 | GET | `/api/admin/reports` | 🛡 | Trust & safety report queue |
-| 50 | PATCH | `/api/admin/reports/<id>` | 🛡 | Resolve a report (+ optional suspend) |
-| 51 | GET | `/api/admin/support` | 🛡 | Support ticket desk |
-| 52 | PATCH | `/api/admin/support/<id>` | 🛡 | Resolve / reopen a ticket |
-| 53 | GET | `/api/admin/courts` | 🛡 | All courts (incl. inactive) |
-| 54 | POST | `/api/admin/courts` | 🛡 | Create a court |
-| 55 | PATCH | `/api/admin/courts/<id>` | 🛡 | Edit a court |
-| 56 | DELETE | `/api/admin/courts/<id>` | 🛡 | Soft-close a court |
+| 46 | GET | `/api/admin/overview` | 🛡 | Ops dashboard aggregate |
+| 47 | GET | `/api/admin/stats` | 🛡 | Headline counts |
+| 48 | GET | `/api/admin/users` | 🛡 | Paged, filterable user list |
+| 49 | GET | `/api/admin/users/<id>` | 🛡 | One user (full record) |
+| 50 | PATCH | `/api/admin/users/<id>` | 🛡 | Edit user / ratings / suspend |
+| 51 | DELETE | `/api/admin/users/<id>/photo` | 🛡 | Strip a user's photo (trust & safety) |
+| 52 | DELETE | `/api/admin/users/<id>` | 🛡 | Delete an account |
+| 53 | GET | `/api/admin/reports` | 🛡 | Trust & safety report queue |
+| 54 | PATCH | `/api/admin/reports/<id>` | 🛡 | Resolve a report (+ optional suspend) |
+| 55 | GET | `/api/admin/support` | 🛡 | Support ticket desk |
+| 56 | PATCH | `/api/admin/support/<id>` | 🛡 | Resolve / reopen a ticket |
+| 57 | GET | `/api/admin/courts` | 🛡 | All courts (incl. inactive) |
+| 58 | POST | `/api/admin/courts` | 🛡 | Create a court |
+| 59 | PATCH | `/api/admin/courts/<id>` | 🛡 | Edit a court |
+| 60 | DELETE | `/api/admin/courts/<id>` | 🛡 | Soft-close a court |
 
 > The interactive Swagger UI at `/api/docs/` renders the same list with a
 > "Try it out" button per endpoint.
@@ -195,7 +199,8 @@ Errors: `401` invalid credentials · `429` rate limited (10/min per IP, 10/15 mi
 
 #### PATCH `/api/auth/me`  — update profile  🔒
 Any subset of the fields may be sent (partial update). Sending `availability`
-replaces the entire weekly grid; sending `sportProfiles` upserts the desired set.
+replaces the entire weekly grid; sending `sportProfiles` upserts the desired set;
+sending `availabilityOverrides` replaces the entire set of date-specific tweaks.
 
 **Input**
 ```json
@@ -206,11 +211,23 @@ replaces the entire weekly grid; sending `sportProfiles` upserts the desired set
     { "dayOfWeek": 5, "timeBand": "MORN", "status": 2 },
     { "dayOfWeek": 6, "timeBand": "MORN", "status": 2 },
     { "dayOfWeek": 2, "timeBand": "EVE",  "status": 1 }
+  ],
+  "availabilityOverrides": [
+    { "date": "2026-08-01", "timeBand": "MORN", "status": 0 },
+    { "date": "2026-08-03", "timeBand": "EVE",  "status": 2 }
   ]
 }
 ```
 **Output `200`** `{ "user": { ...updated... } }`
 (`status`: 0 = unavailable, 1 = maybe, 2 = available. `timeBand`: MORN/AFT/EVE.)
+
+Each `availabilityOverrides` item is
+`{ "date": "YYYY-MM-DD", "timeBand": "MORN" | "AFT" | "EVE", "status": 0 | 1 | 2 }`
+— a date-specific exception layered over the weekly grid ("busy *this* Saturday
+morning"). Unlike the grid, `status: 0` cells are stored (they override a free
+weekly slot); cells with past dates are silently dropped (natural cleanup). The
+`user` payload — and every player payload (e.g. from `GET /api/players`) — now
+includes the future-dated `availabilityOverrides` list in the same shape.
 
 #### Other auth routes
 - `POST /api/auth/logout` → `{ "ok": true }` (clears cookies).
@@ -275,7 +292,45 @@ transparent signals)
 `reason` ∈ `harassment | no_show | fake_profile | inappropriate | safety | other`.
 **Output `201`** `{ "ok": true }` · inserts a `user_reports` row (repeat open reports from the same reporter are collapsed).
 
-### 3.3 AI match reason
+### 3.3 Profile photos
+
+Avatars live inline in the database (`user_photos`, one row per user, upserted).
+The client center-crops and resizes to a 256px JPEG (~30 KB) before upload; the
+server enforces a 500 KB ceiling on the decoded bytes as a safety net. User and
+player payloads carry a `photoVersion` (null when no photo) that the frontend
+appends as `?v=` when building the image URL.
+
+#### PUT `/api/auth/me/photo`  🔒 — upload / replace your photo
+**Input** (a base64 `data:` URL — PNG, JPEG, or WebP)
+```json
+{ "dataUrl": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..." }
+```
+**Output `200`** — the updated user; `photoVersion` bumps on every change
+```json
+{ "user": { "id": 3, "name": "Casey Nguyen", "photoVersion": 1784937600, "...": "..." } }
+```
+Errors:
+- `413` `{ "error": "Image too large — keep it under 500 KB" }` (decoded size over the ceiling)
+- `422` `{ "error": "Send dataUrl as a base64 PNG/JPEG/WebP data URL" }` (wrong format) · `{ "error": "Invalid base64 image data" }` · `{ "error": "Empty image" }`
+
+#### DELETE `/api/auth/me/photo`  🔒 — remove your photo
+Back to the initials avatar. Idempotent.
+**Output `200`** `{ "user": { ..., "photoVersion": null } }`
+
+#### GET `/api/players/<id>/photo`  — serve the photo bytes
+Deliberately **public** (no 🔒): `<img>` tags don't send the cross-site auth
+cookie in production, and avatars are shown to every signed-in user anyway.
+**Output `200`** is the raw image bytes (not JSON) with `Content-Type:
+image/png|jpeg|webp` and `Cache-Control: public, max-age=86400` — long caching
+is safe because clients bust the cache with `?v=<photoVersion>`.
+`404` `{ "error": "No photo" }` when the user has no photo, doesn't exist, or is suspended.
+
+#### DELETE `/api/admin/users/<id>/photo`  🛡 — strip a user's photo
+Trust & safety: removes the photo (the user falls back to initials and may
+upload a new one). Idempotent.
+**Output `200`** `{ "ok": true }` · `404` unknown user.
+
+### 3.4 AI match reason
 
 #### POST `/api/ai/match-reason`  🔒
 Computes (or refreshes) the cached verdict for one candidate. **Upserts** an
@@ -286,7 +341,7 @@ unset.
 **Input** `{ "candidateId": 2, "sport": "Pickleball" }`
 **Output `200`** `{ "score": 72, "reason": "Same level (DUPR 3.5); 0.9 mi away", "source": "heuristic" }`
 
-### 3.4 Sessions (request → accept → reschedule → cancel)
+### 3.5 Sessions (request → accept → reschedule → cancel)
 
 #### POST `/api/sessions`  🔒 — request a game
 Inserts a `sessions` row with `status = pending`. `court` is an optional slug.
@@ -321,7 +376,7 @@ Move the row to `status = cancelled` (kept as a trace in Past for 30 days).
 #### GET `/api/sessions`  🔒
 **Output `200`** `{ "sessions": [ { ...viewer-relative dict, bucketed... } ] }`
 
-### 3.5 Courts, check-ins & open games
+### 3.6 Courts, check-ins & open games
 
 #### GET `/api/courts?sport=Pickleball&q=grant`  🔒
 **Output `200`**
@@ -376,7 +431,7 @@ player is **promoted** (and emailed).
 #### DELETE `/api/appointments/<id>`  🔒 (host only)
 Sets `status = cancelled`. `403` if not the host.
 
-### 3.6 Two-phase invites
+### 3.7 Two-phase invites
 
 The invite flow separates "will you play me?" from "when?". Phases:
 `awaiting_opponent → settling_time → confirmed` (or `declined` / `cancelled`).
@@ -405,7 +460,7 @@ Move the invite to `declined` / `cancelled` (decline accepts an optional `reason
 #### GET `/api/invites`  🔒
 **Output `200`** `{ "invites": [ ...viewer-relative, non-confirmed... ] }`
 
-### 3.7 Support
+### 3.8 Support
 
 #### POST `/api/support/chat`  🔒
 **Input** `{ "message": "How do I request a game?", "history": [] }`
@@ -415,7 +470,7 @@ Move the invite to `declined` / `cancelled` (decline accepts an optional `reason
 **Input** `{ "message": "I can't change my home court — is that a bug?" }`
 **Output `200`** `{ "ok": true, "emailed": false, "ticketId": 1 }` — persists a `support_tickets` row (source of truth) and best-effort emails the inbox.
 
-### 3.8 Admin  🛡
+### 3.9 Admin  🛡
 
 All require `is_admin`. Non-admins get `403`.
 
@@ -429,6 +484,7 @@ Paged, filterable user list. `GET /api/admin/users/<id>` returns one full record
 #### PATCH `/api/admin/users/<id>`
 Edit name/email/handle/location/coords, per-sport ratings, admin flag, and
 suspend/reactivate. **Input** e.g. `{ "isActive": false }` → suspends (and revokes tokens).
+`DELETE /api/admin/users/<id>/photo` strips a user's profile photo (sample I/O in §3.3).
 
 #### GET `/api/admin/reports` · PATCH `/api/admin/reports/<id>`
 The trust & safety queue. Resolving:
@@ -458,5 +514,5 @@ open http://localhost:5050/api/docs/
 ```
 
 The full, captured request → response → **database change** transcript for a
-36-call end-to-end run is in `MILESTONE_2_TEST_RESULTS.md` (and the raw
+39-call end-to-end run is in `MILESTONE_2_TEST_RESULTS.md` (and the raw
 `api_demo_output.txt`), reproducible with `python api_demo.py`.

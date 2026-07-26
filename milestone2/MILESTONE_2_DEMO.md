@@ -4,7 +4,7 @@
 > Tool: QuickTime Player → File → New Screen Recording (or Zoom local recording).
 >
 > Companion deliverable docs (open these in tabs):
-> [MILESTONE_2_SUBMISSION.md](./MILESTONE_2_SUBMISSION.md) ·
+> [README.md (submission index)](./README.md) ·
 > [API reference](./MILESTONE_2_API_REFERENCE.md) ·
 > [Database design](./MILESTONE_2_DATABASE_DESIGN.md) ·
 > [Test results](./MILESTONE_2_TEST_RESULTS.md)
@@ -35,8 +35,8 @@ Close noisy apps; phone on silent.
 ### Section 1 — Intro (45s)
 > "Hi, I'm Phoebe. This is Milestone 2 of my capstone, RallyPoint — an
 > AI-powered tennis and pickleball partner-matching app. Milestone 1 was the
-> React front end; today is the **backend**: a Flask REST API with 55 endpoints
-> over a 15-table SQLAlchemy database, JWT auth, Pydantic validation, and an
+> React front end; today is the **backend**: a Flask REST API with 60 endpoints
+> over a 17-table SQLAlchemy database, JWT auth, Pydantic validation, and an
 > explainable AI matching service."
 
 Show the README architecture diagram briefly.
@@ -51,7 +51,7 @@ appointments, invites, admin, support.
 ### Section 3 — Database schema (90s) ⭐
 Open `MILESTONE_2_DATABASE_DESIGN.md` and show the ER diagram, then the
 `models/` folder.
-> "The schema is 15 tables. A few design choices I want to call out:"
+> "The schema is 17 tables. A few design choices I want to call out:"
 - `user.py` → "Profiles are **per sport** — `sport_profiles` — so someone can be
   a 4.0 tennis player and a 3.0 pickleball player."
 - `session_model.py` → "A session links two users, host and guest, with a
@@ -61,6 +61,10 @@ Open `MILESTONE_2_DATABASE_DESIGN.md` and show the ER diagram, then the
 - `ai_match_log.py` → "Match verdicts are cached with a unique constraint on
   `(viewer, candidate, sport)`, so calling it twice **upserts** instead of
   duplicating."
+- `user.py` + `availability.py` → "The two newest tables: `user_photos` stores
+  profile photos as DB blobs — one row per user, no S3 needed at this scale —
+  and `availability_overrides` layers date-specific exceptions over the weekly
+  availability grid."
 
 ### Section 4 — Swagger UI (90s) ⭐⭐ centerpiece
 Switch to `http://localhost:5050/api/docs/`.
@@ -85,7 +89,7 @@ In the terminal:
 python api_demo.py | less
 ```
 > "This is the part the assignment asks for — proof the database updates after
-> **each** operation. This script makes 36 real API calls and, after every one,
+> **each** operation. This script makes 39 real API calls and, after every one,
 > prints the change in the database."
 
 Scroll through and narrate a few:
@@ -104,15 +108,15 @@ Scroll through and narrate a few:
 ```bash
 pytest -v
 ```
-Pause on `120 passed`.
-> "120 automated tests across 14 files cover the whole surface — auth, matching,
+Pause on `124 passed`.
+> "124 automated tests across 14 files cover the whole surface — auth, matching,
 > sessions, invites, appointments, courts, admin, support — plus the security
 > invariants. They run on every push via GitHub Actions."
 
 ### Section 8 — Close (20s)
-> "That's the Milestone 2 backend: 55 endpoints, 15 tables, JWT auth, Pydantic
+> "That's the Milestone 2 backend: 60 endpoints, 17 tables, JWT auth, Pydantic
 > validation, explainable AI matching, all integrated with the database and
-> verified by 120 tests and a live per-operation demo. Thanks for watching."
+> verified by 124 tests and a live per-operation demo. Thanks for watching."
 
 **Stop recording.**
 
@@ -155,7 +159,7 @@ support chat returns a "leave a message" reply — never an error.
 
 1. **Video** (.mp4/.mov, < 500 MB) recorded from this script.
 2. **GitHub repository link** (this repo).
-3. The three deliverable docs in `docs/`:
+3. The three deliverable docs in `milestone2/`:
    `MILESTONE_2_API_REFERENCE.md`, `MILESTONE_2_DATABASE_DESIGN.md`,
-   `MILESTONE_2_TEST_RESULTS.md` (+ the index `MILESTONE_2_SUBMISSION.md`).
+   `MILESTONE_2_TEST_RESULTS.md` (+ the index `README.md`).
 4. **AI_DISCLOSURE.md** (already in the repo root).
