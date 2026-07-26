@@ -4,12 +4,12 @@ Milestone 2 — live API demonstration harness.
 Exercises the RallyPoint REST API end-to-end against a fresh on-disk SQLite
 database and, after EVERY write operation, prints the resulting change in the
 database (which tables gained/lost rows, and the affected row itself). This is
-the reproducible evidence behind docs/MILESTONE_2_TEST_RESULTS.md:
+the reproducible evidence behind milestone2/MILESTONE_2_TEST_RESULTS.md:
 
     request  ->  HTTP response  ->  database delta
 
 Run:  .venv/bin/python api_demo.py
-      .venv/bin/python api_demo.py > ../docs/api_demo_output.txt
+      .venv/bin/python api_demo.py > ../milestone2/api_demo_output.txt
 
 It is self-contained: it builds its own DB, seeds two players + one court + an
 admin, and never touches the dev rallypoint.db. Rate limiting is disabled so the
@@ -33,14 +33,23 @@ from models import User, SportProfile, Court    # noqa: E402
 
 # Every table we track for the "database delta" evidence lines.
 TABLES = [
-    "users", "sport_profiles", "availability_slots", "courts", "court_favorites",
+    "users", "sport_profiles", "availability_slots", "availability_overrides",
+    "courts", "court_favorites",
     "court_checkins", "court_appointments", "appointment_participants",
     "saved_players", "sessions", "game_invites", "time_proposals",
-    "ai_match_logs", "user_reports", "support_tickets",
+    "ai_match_logs", "user_reports", "support_tickets", "user_photos",
 ]
 
 FUTURE = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
 FUTURE2 = (datetime.utcnow() + timedelta(days=8)).replace(microsecond=0).isoformat()
+FUTURE_DATE = (datetime.utcnow() + timedelta(days=7)).date().isoformat()
+
+# A real 1x1 transparent PNG (68 bytes decoded) — the client normally sends a
+# 256px-square JPEG (~30 KB); this keeps the transcript readable.
+TINY_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="
+)
 
 
 class DemoConfig(Config):
@@ -207,6 +216,22 @@ def main():
                    {"dayOfWeek": 2, "timeBand": "EVE", "status": 1}]},
          watch=(f"SELECT id, location, bio FROM users WHERE id={alex_id}", {}))
 
+    call("Date-specific availability override — busy THIS morning despite the "
+         "weekly grid (INSERT availability_overrides)",
+         "PATCH", "/api/auth/me", headers=ah,
+         body={"availabilityOverrides": [
+             {"date": FUTURE_DATE, "timeBand": "MORN", "status": 0}]},
+         note="overlays the weekly grid for one concrete date only",
+         watch=(f"SELECT user_id, date, time_band, status FROM availability_overrides "
+                f"WHERE user_id={alex_id}", {}))
+
+    call("Upload a profile photo as a base64 data URL (INSERT user_photos)",
+         "PUT", "/api/auth/me/photo", headers=bearer(casey_tok),
+         body={"dataUrl": TINY_PNG_DATA_URL},
+         note="stored as a DB blob; response bumps photoVersion for cache-busting",
+         watch=(f"SELECT user_id, mime, length(data) AS bytes, updated_at "
+                f"FROM user_photos WHERE user_id={casey_id}", {}))
+
     # ---- PLAYERS / MATCHING -------------------------------------------------
     call("AI-ranked partner list for the viewer (read-only GET; scores inline)",
          "GET", "/api/players?sport=Pickleball", headers=ah)
@@ -336,6 +361,13 @@ def main():
              watch=(f"SELECT r.id, r.status, u.is_active AS reported_is_active "
                     f"FROM user_reports r JOIN users u ON u.id = r.reported_id "
                     f"WHERE r.id={rid}", {}))
+
+    call("Admin strips the reported user's profile photo — moderation "
+         "(DELETE user_photos)",
+         "DELETE", f"/api/admin/users/{casey_id}/photo", headers=ah,
+         note="the photo Casey uploaded earlier; they fall back to the initials avatar",
+         watch=(f"SELECT user_id, mime, length(data) AS bytes "
+                f"FROM user_photos WHERE user_id={casey_id}", {}))
 
     tickets = client.get("/api/admin/support", headers=ah).get_json()
     tid = tickets["tickets"][0]["id"] if tickets.get("tickets") else None

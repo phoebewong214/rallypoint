@@ -4,7 +4,7 @@
 Author: Phoebe Wang · ACIS 498 Capstone, Northwestern University
 Repository: https://github.com/phoebewong214/rallypoint
 
-RallyPoint's data layer is a **SQLAlchemy ORM** model over **15 relational
+RallyPoint's data layer is a **SQLAlchemy ORM** model over **17 relational
 tables**. It runs on **SQLite in development** and **PostgreSQL in production**
 — the same ORM code drives both, switched by a single `DATABASE_URL` environment
 variable (no code change). This document is the full schema: every table, its
@@ -36,6 +36,13 @@ alongside this file as **`schema_ddl.sql`**.
    │ FK home_court_id ─┼──┐     │ time_band · status│  │ uq(user,player)  │  │ FK resolved_by   │
    │ uq(user,sport)    │  │     │ uq(user,dow,band) │  └──────────────────┘  │ reason · status  │
    └───────────────────┘  │     └──────────────────┘                        └──────────────────┘
+                          │     ┌────────────────────────┐  ┌───────────────────────┐
+                          │     │ availability_overrides │  │      user_photos      │
+                          │     │ PK id · FK user_id     │  │ PK/FK user_id (1─1)   │
+                          │     │ date · time_band       │  │ mime · data (BLOB)    │
+                          │     │ status                 │  │ updated_at            │
+                          │     │ uq(user,date,band)     │  └───────────────────────┘
+                          │     └────────────────────────┘
                           │
    ┌──────────────────┐   │     ┌──────────────────┐        ┌───────────────────────────┐
    │      courts      │◄──┘     │     sessions     │        │   court_appointments      │
@@ -67,7 +74,8 @@ alongside this file as **`schema_ddl.sql`**.
                                 └──────────────────┘
 ```
 
-**Reading the diagram:** `1 ─── *` = one-to-many. `uq(...)` = a unique
+**Reading the diagram:** `1 ─── *` = one-to-many; `1─1` = one-to-one
+(`user_photos` uses `user_id` as its own primary key). `uq(...)` = a unique
 constraint (composite where multiple columns are listed). Every `FK` is a
 foreign key into the referenced table's primary key.
 
@@ -96,8 +104,8 @@ foreign key into the referenced table's primary key.
    cancelling a session (`status = 'cancelled'`) all preserve the row and its
    history rather than destroying it.
 6. **Portability.** Types are chosen to be identical across SQLite and Postgres
-   (`INTEGER`, `VARCHAR(n)`, `TEXT`, `FLOAT`, `BOOLEAN`, `DATETIME`), so the one
-   `DATABASE_URL` switch is genuinely code-free.
+   (`INTEGER`, `VARCHAR(n)`, `TEXT`, `FLOAT`, `BOOLEAN`, `DATETIME`, `DATE`,
+   `BLOB`/`BYTEA`), so the one `DATABASE_URL` switch is genuinely code-free.
 
 ---
 
@@ -125,9 +133,29 @@ The root identity table. One row per person.
 | `avatar_color`, `avatar_fg` | VARCHAR | | Derived UI colors |
 | `created_at` | DATETIME | default now | |
 
-**Relationships:** 1→* `sport_profiles`, `availability_slots` (both cascade delete).
+**Relationships:** 1→* `sport_profiles`, `availability_slots`,
+`availability_overrides`; 1→1 `user_photos` (all cascade delete).
 
-### 3.2 `sport_profiles` — a user's profile for one sport
+### 3.2 `user_photos` — profile photo (one per user)
+The avatar bytes themselves, stored inline in the database and keyed 1:1 to
+`users` by making `user_id` the primary key.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `user_id` | INTEGER | **PK**, **FK → users.id** | PK-as-FK enforces at most one photo per user; upload **upserts** this row |
+| `mime` | VARCHAR(30) | NOT NULL | image/jpeg \| image/png \| image/webp |
+| `data` | BLOB | NOT NULL | The image bytes; a **deferred** column, so list queries never drag blobs along |
+| `updated_at` | DATETIME | default now, auto-updates | Its timestamp is the `?v=` cache-buster (`photoVersion` in API payloads) |
+
+**Why a DB blob and not S3/object storage:** avatars are tiny — the client
+center-crops and resizes to a 256 px JPEG (~30 KB) before upload, and the API
+rejects anything over 500 KB decoded — and Render's disk is ephemeral, so the
+database is the only persistent store the app already has. At this scale a
+blob column is one less moving part: no bucket, no credentials, no
+orphaned-object cleanup. Deferring `data` keeps the bytes out of every query
+that only needs the cache-busting version.
+
+### 3.3 `sport_profiles` — a user's profile for one sport
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -140,7 +168,7 @@ The root identity table. One row per person.
 
 **Constraint:** `UNIQUE(user_id, sport)` — one profile per sport per user.
 
-### 3.3 `availability_slots` — weekly preferred-times grid
+### 3.4 `availability_slots` — weekly preferred-times grid
 Drives both the Profile heatmap and the schedule-overlap match signal.
 
 | Column | Type | Constraints | Notes |
@@ -153,7 +181,28 @@ Drives both the Profile heatmap and the schedule-overlap match signal.
 
 **Constraint:** `UNIQUE(user_id, day_of_week, time_band)` — one cell per slot.
 
-### 3.4 `courts` — real Chicago courts
+### 3.5 `availability_overrides` — date-specific exceptions
+Layers concrete-date exceptions over the weekly `availability_slots` grid
+("busy *this* Saturday", "free on July 30 for once").
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | INTEGER | **PK** | |
+| `user_id` | INTEGER | NOT NULL, **FK → users.id**, indexed | |
+| `date` | DATE | NOT NULL | A concrete calendar date. Plain DATE on purpose — the datetime pipeline is naive-UTC and would shift evening slots across date boundaries |
+| `time_band` | VARCHAR(10) | NOT NULL | "MORN" \| "AFT" \| "EVE" — same bands as the weekly grid |
+| `status` | INTEGER | NOT NULL, default 0 | Same encoding as `availability_slots`: 0 = unavailable, 1 = maybe, 2 = available |
+
+**Constraint:** `UNIQUE(user_id, date, time_band)` — one override per cell per date.
+
+**Resolution rule:** effective availability for a concrete date = the override
+when one exists, else the weekly slot for that weekday. Because an override
+carries the same 0/1/2 status, it can both *add* availability (status 2 on a
+normally-empty day) and *remove* it (status 0 on a normally-available day).
+Rows expire naturally as their dates pass — past-date overrides are never
+serialized, so no cleanup job is needed.
+
+### 3.6 `courts` — real Chicago courts
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -169,7 +218,7 @@ Drives both the Profile heatmap and the schedule-overlap match signal.
 | `lights` | BOOLEAN | default 0 | |
 | `is_active` | BOOLEAN | NOT NULL, default 1 | Soft-close flag |
 
-### 3.5 `court_favorites` — a user's bookmarked courts
+### 3.7 `court_favorites` — a user's bookmarked courts
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -179,7 +228,7 @@ Drives both the Profile heatmap and the schedule-overlap match signal.
 
 **Constraint:** `UNIQUE(user_id, court_id)` — favoriting twice is a no-op.
 
-### 3.6 `court_checkins` — "I'm here now" signal
+### 3.8 `court_checkins` — "I'm here now" signal
 A check-in is considered active for ~2 hours (windowed in queries, not stored).
 
 | Column | Type | Constraints |
@@ -191,7 +240,7 @@ A check-in is considered active for ~2 hours (windowed in queries, not stored).
 
 **Constraint:** `UNIQUE(court_id, user_id)` — re-checking-in refreshes the timestamp.
 
-### 3.7 `court_appointments` — open games at a court
+### 3.9 `court_appointments` — open games at a court
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -207,7 +256,7 @@ A check-in is considered active for ~2 hours (windowed in queries, not stored).
 
 **Relationship:** 1→* `appointment_participants` (cascade delete).
 
-### 3.8 `appointment_participants` — the roster + waitlist
+### 3.10 `appointment_participants` — the roster + waitlist
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -221,7 +270,7 @@ A check-in is considered active for ~2 hours (windowed in queries, not stored).
 confirmed spot frees up, the earliest `waitlisted` row is promoted (flipped to
 `false`).
 
-### 3.9 `saved_players` — bookmarked partners
+### 3.11 `saved_players` — bookmarked partners
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -231,7 +280,7 @@ confirmed spot frees up, the earliest `waitlisted` row is promoted (flipped to
 
 **Constraint:** `UNIQUE(user_id, player_id)`.
 
-### 3.10 `sessions` — a game between two users
+### 3.12 `sessions` — a game between two users
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -249,7 +298,7 @@ Status is **viewer-relative** in the API: an open invite reads as `requested`
 to the guest and `pending` to the host. Buckets (`upcoming`/`requests`/`past`)
 are derived, not stored.
 
-### 3.11 `game_invites` — two-phase invite negotiation
+### 3.13 `game_invites` — two-phase invite negotiation
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -266,7 +315,7 @@ are derived, not stored.
 
 **Relationship:** 1→* `time_proposals` (cascade delete).
 
-### 3.12 `time_proposals` — offered times within an invite
+### 3.14 `time_proposals` — offered times within an invite
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -278,7 +327,7 @@ are derived, not stored.
 | `status` | VARCHAR(16) | NOT NULL, default "open" | open \| accepted \| superseded |
 | `created_at` | DATETIME | default now | |
 
-### 3.13 `ai_match_logs` — cached match verdicts
+### 3.15 `ai_match_logs` — cached match verdicts
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -295,7 +344,7 @@ are derived, not stored.
 **Constraint:** `UNIQUE(viewer_id, candidate_id, sport)` — the match-reason
 endpoint **upserts** this row, so a verdict is stable across page loads.
 
-### 3.14 `user_reports` — trust & safety queue
+### 3.16 `user_reports` — trust & safety queue
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -310,7 +359,7 @@ endpoint **upserts** this row, so a verdict is stable across page loads.
 | `resolved_by_id` | INTEGER | **FK → users.id** | The admin who resolved it |
 | `resolution_note` | TEXT | | |
 
-### 3.15 `support_tickets` — "talk to a human" escalations
+### 3.17 `support_tickets` — "talk to a human" escalations
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
@@ -334,6 +383,8 @@ endpoint **upserts** this row, so a verdict is stable across page loads.
 | `users` | `email`, `handle` | One account per email; unique @handle |
 | `sport_profiles` | `(user_id, sport)` | One profile per sport per user |
 | `availability_slots` | `(user_id, day_of_week, time_band)` | One grid cell per slot |
+| `availability_overrides` | `(user_id, date, time_band)` | One override per cell per date |
+| `user_photos` | `user_id` (the PK itself) | At most one photo per user |
 | `courts` | `slug` | Unique URL id |
 | `court_favorites` | `(user_id, court_id)` | No duplicate favorites |
 | `court_checkins` | `(court_id, user_id)` | One active check-in per court |
@@ -347,9 +398,9 @@ indexed — `sessions.host_id/guest_id`, `game_invites.inviter_id/invitee_id/pha
 and the `status` columns on `user_reports` / `support_tickets`.
 
 **Referential integrity:** every relationship is a real `FOREIGN KEY`. Owned
-child collections (`sport_profiles`, `availability_slots`, `time_proposals`,
-`appointment_participants`) use `cascade="all, delete-orphan"` so deleting the
-parent cleans up its children.
+child records (`sport_profiles`, `availability_slots`, `availability_overrides`,
+`user_photos`, `time_proposals`, `appointment_participants`) use
+`cascade="all, delete-orphan"` so deleting the parent cleans up its children.
 
 ---
 
@@ -359,7 +410,10 @@ parent cleans up its children.
   `models/__init__.py` registers them all on `db.metadata`.
 - **Schema creation:** `python seed.py` (dev) or `python manage.py init-db`
   (deploy) runs `db.create_all()` idempotently. `seed.py` loads 6 sample users,
-  8 real Chicago courts, and 6 sessions.
+  8 real Chicago courts, and 6 sessions. Brand-new tables (most recently
+  `user_photos` and `availability_overrides`) are picked up by `create_all` on
+  deploy with no migration — it only adds what's missing, never alters what
+  exists.
 - **Migrations:** Flask-Migrate (Alembic) is initialized with a baseline
   revision and two follow-ups in `backend/migrations/versions/` (add
   `users.is_admin`, add `users.bio_embedding`). See ADR-009 in `ARCHITECTURE.md`
@@ -368,4 +422,4 @@ parent cleans up its children.
   (`sqlite:///rallypoint.db` → `postgresql://…`). `psycopg2-binary` is already a
   dependency.
 
-The complete generated DDL is in **`docs/schema_ddl.sql`**.
+The complete generated DDL is in **`milestone2/schema_ddl.sql`**.
