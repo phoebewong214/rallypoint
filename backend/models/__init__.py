@@ -2,7 +2,7 @@
 Importing this module ensures every model class is registered on db.metadata
 before migrations or create_all() runs.
 """
-from .user import User, SportProfile  # noqa: F401
+from .user import User, SportProfile, UserPhoto  # noqa: F401
 from .court import Court  # noqa: F401
 from .court_favorite import CourtFavorite  # noqa: F401
 from .saved_player import SavedPlayer  # noqa: F401

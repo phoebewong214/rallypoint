@@ -5,9 +5,10 @@ POST /api/auth/signup  body: {email, password, name, sport?, ntrp?, location?}
 POST /api/auth/login   body: {email, password}
 GET  /api/auth/me      cookie: rp_session (or Authorization: Bearer <jwt>)
 """
+import base64
 import json
 import re
-from datetime import date as dt_date
+from datetime import date as dt_date, datetime
 from flask import Blueprint, jsonify, request, current_app, make_response
 from flask_limiter.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from utils.auth_cookies import set_auth_cookies, clear_auth_cookies
 
 from extensions import db, limiter
-from models import User, SportProfile, Court, AvailabilitySlot, AvailabilityOverride
+from models import User, SportProfile, Court, AvailabilitySlot, AvailabilityOverride, UserPhoto
 from services.embeddings import embed_text
 from schemas import (
     LoginSchema,
@@ -185,6 +186,69 @@ def me():
       401: {description: Missing/invalid/expired token}
     """
     return jsonify({"user": current_user().to_dict(with_email=True)})
+
+
+# Profile photos arrive as base64 data URLs. The client resizes to a 256px
+# square JPEG (~30 KB) first; the 500 KB ceiling is just a safety net.
+_PHOTO_MAX_BYTES = 500_000
+_PHOTO_RE = re.compile(r"^data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
+
+
+@auth_bp.put("/me/photo")
+@require_auth
+def set_my_photo():
+    """
+    Upload or replace the current user's profile photo.
+    ---
+    tags: [Auth]
+    security:
+      - Bearer: []
+    responses:
+      200: {description: Updated user (photoVersion bumped)}
+      413: {description: Image too large}
+      422: {description: Not a base64 PNG/JPEG/WebP data URL}
+    """
+    body = request.get_json(silent=True) or {}
+    data_url = body.get("dataUrl") or ""
+    # Bound the regex input before matching so a huge payload can't hurt.
+    m = _PHOTO_RE.match(data_url) if len(data_url) < _PHOTO_MAX_BYTES * 2 else None
+    if not m:
+        return jsonify({"error": "Send dataUrl as a base64 PNG/JPEG/WebP data URL"}), 422
+    try:
+        raw = base64.b64decode(m.group(2))
+    except ValueError:
+        return jsonify({"error": "Invalid base64 image data"}), 422
+    if not raw:
+        return jsonify({"error": "Empty image"}), 422
+    if len(raw) > _PHOTO_MAX_BYTES:
+        return jsonify({"error": "Image too large — keep it under 500 KB"}), 413
+
+    user = current_user()
+    photo = db.session.get(UserPhoto, user.id) or UserPhoto(user_id=user.id)
+    photo.mime = f"image/{m.group(1)}"
+    photo.data = raw
+    photo.updated_at = datetime.utcnow()
+    db.session.add(photo)
+    db.session.commit()
+    return jsonify({"user": user.to_dict(with_email=True)})
+
+
+@auth_bp.delete("/me/photo")
+@require_auth
+def delete_my_photo():
+    """
+    Remove the current user's profile photo (back to the initials avatar).
+    ---
+    tags: [Auth]
+    security:
+      - Bearer: []
+    responses:
+      200: {description: Updated user (photoVersion null)}
+    """
+    user = current_user()
+    UserPhoto.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    return jsonify({"user": user.to_dict(with_email=True)})
 
 
 @auth_bp.patch("/me")

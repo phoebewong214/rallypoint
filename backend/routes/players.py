@@ -10,12 +10,12 @@ Query params:
 """
 from datetime import date as dt_date
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models import User, SportProfile, Court, SavedPlayer, AvailabilitySlot, UserReport
+from models import User, SportProfile, Court, SavedPlayer, AvailabilitySlot, UserPhoto, UserReport
 from schemas import CreateReportSchema
 from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
@@ -71,7 +71,7 @@ def list_players():
     candidates_q = (
         db.session.query(User)
         .options(selectinload(User.sport_profiles), selectinload(User.availability),
-                 selectinload(User.availability_overrides))
+                 selectinload(User.availability_overrides), selectinload(User.photo))
         .join(SportProfile, SportProfile.user_id == User.id)
         .filter(User.id != viewer.id)
         .filter(User.is_active.is_(True))  # suspended accounts never surface as partners
@@ -117,6 +117,7 @@ def list_players():
                 "initials": cand.initials,
                 "color": cand.avatar_color,
                 "fg": cand.avatar_fg,
+                "photoVersion": cand.photo.version if cand.photo else None,
                 "location": cand.location,
                 "distance": f"{m['distance']:.1f}" if m["distance"] is not None else "—",
                 "online": False,
@@ -154,7 +155,7 @@ def saved_players():
     viewer = current_user()
     rows = (
         db.session.query(User)
-        .options(selectinload(User.sport_profiles))
+        .options(selectinload(User.sport_profiles), selectinload(User.photo))
         .join(SavedPlayer, SavedPlayer.player_id == User.id)
         .filter(SavedPlayer.user_id == viewer.id)
         .all()
@@ -166,6 +167,7 @@ def saved_players():
             "initials": u.initials,
             "color": u.avatar_color,
             "fg": u.avatar_fg,
+            "photoVersion": u.photo.version if u.photo else None,
             "location": u.location,
             "primarySport": u.primary_sport,
             "sports": [p.sport for p in u.sport_profiles],
@@ -173,6 +175,33 @@ def saved_players():
         for u in rows
     ]
     return jsonify({"players": players, "count": len(players)})
+
+
+@players_bp.get("/<int:pid>/photo")
+def player_photo(pid: int):
+    """
+    Serve a player's profile photo. Deliberately public: <img> tags don't send
+    the cross-site auth cookie in production (Vercel frontend / Render API),
+    and avatars are shown to every signed-in user anyway. Suspended users 404.
+    ---
+    tags: [Players]
+    responses:
+      200: {description: The image bytes}
+      404: {description: No photo / unknown or suspended user}
+    """
+    photo = (
+        UserPhoto.query
+        .join(User, User.id == UserPhoto.user_id)
+        .filter(UserPhoto.user_id == pid, User.is_active.is_(True))
+        .first()
+    )
+    if not photo:
+        return jsonify({"error": "No photo"}), 404
+    resp = make_response(photo.data)
+    resp.headers["Content-Type"] = photo.mime
+    # Immutable-ish: the URL carries ?v=<version>, so long caching is safe.
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @players_bp.post("/<int:pid>/save")

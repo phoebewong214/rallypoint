@@ -50,6 +50,8 @@ export interface User {
   sportProfiles?: UserSportProfile[];
   availability?: AvailabilitySlotDTO[];
   availabilityOverrides?: AvailabilityOverrideDTO[];
+  /** Cache-busting photo version; null/undefined = no profile photo. */
+  photoVersion?: number | null;
 }
 
 export interface SportProfile {
@@ -76,6 +78,7 @@ export interface Player {
   availability?: string;
   availabilitySlots?: AvailabilitySlotDTO[];
   availabilityOverrides?: AvailabilityOverrideDTO[];
+  photoVersion?: number | null;
   matchScore?: number;
   matchTier?: "great" | "good" | "fair";
   matchReasons?: string[];

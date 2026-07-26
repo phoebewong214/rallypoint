@@ -839,7 +839,20 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--green);
   border: 2.5px solid var(--card);
   box-shadow: 0 0 6px var(--green-deep);
+  z-index: 2;
 }
+
+/* Profile photo layer inside any avatar shape — covers the initials once it
+   loads. The parent keeps its border-radius; the online dot stays on top. */
+.avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.nav-avatar { position: relative; overflow: hidden; }
 
 /* ===== Badge ===== */
 .badge {
@@ -1775,6 +1788,37 @@ textarea:focus-visible,
   box-shadow: 0 16px 32px -12px rgba(15, 23, 42, 0.25);
   position: relative;
 }
+/* Photo controls on the Profile hero avatar. */
+.hero-photo-btn {
+  position: absolute;
+  right: 2px;
+  top: 90px; /* pinned to the avatar's lower-right corner (avatar is 128px) */
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 16px -6px rgba(15, 23, 42, 0.35);
+  cursor: pointer;
+}
+.hero-photo-btn:hover { border-color: var(--green-deep); color: var(--green-text); }
+.hero-photo-btn:disabled { opacity: 0.6; cursor: default; }
+.hero-photo-remove {
+  display: block;
+  margin: 6px auto 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.hero-photo-remove:hover { color: var(--red, #f43f5e); text-decoration: underline; }
+
 .hero-avatar .online {
   position: absolute;
   bottom: 6px;
@@ -3636,6 +3680,8 @@ button.updays-day.selected:hover {
 .court-regulars { display: inline-flex; align-items: center; gap: 8px; }
 .avatar-stack { display: inline-flex; }
 .avatar-chip {
+  position: relative;
+  overflow: hidden;
   width: 22px;
   height: 22px;
   border-radius: 50%;

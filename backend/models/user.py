@@ -49,6 +49,9 @@ class User(db.Model):
     availability_overrides = db.relationship(
         "AvailabilityOverride", back_populates="user", cascade="all, delete-orphan"
     )
+    photo = db.relationship(
+        "UserPhoto", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
@@ -96,6 +99,7 @@ class User(db.Model):
             "avatarFg": self.avatar_fg,
             "joined": self.created_at.strftime("%b %Y") if self.created_at else None,
             "sportProfiles": [p.to_dict() for p in self.sport_profiles],
+            "photoVersion": self.photo.version if self.photo else None,
             "availability": [s.to_dict() for s in self.availability],
             # Past-date overrides are dead weight — never serialize them.
             "availabilityOverrides": sorted(
@@ -136,3 +140,26 @@ class SportProfile(db.Model):
             "homeCourt": self.home_court.slug if self.home_court else None,
             "homeCourtName": self.home_court.name if self.home_court else None,
         }
+
+
+class UserPhoto(db.Model):
+    """One profile photo per user, stored inline in the DB. Avatars are tiny
+    (the client center-crops and resizes to 256px JPEG before upload), which
+    keeps us off external object storage — Render's disk is ephemeral, so the
+    database is the only persistent place we have. `data` is deferred so list
+    queries can read the cache-busting version without dragging blobs along.
+    New table, so create_all adds it on deploy without touching existing ones."""
+
+    __tablename__ = "user_photos"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    mime = db.Column(db.String(30), nullable=False)  # image/jpeg | image/png | image/webp
+    data = db.deferred(db.Column(db.LargeBinary, nullable=False))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship("User", back_populates="photo")
+
+    @property
+    def version(self) -> int:
+        """Cache-buster for photo URLs (?v=): bumps whenever the photo changes."""
+        return int(self.updated_at.timestamp()) if self.updated_at else 1

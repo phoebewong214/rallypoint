@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { TopNav, Icon, ratingLabel } from "../rally-shared";
+import { TopNav, Icon, ratingLabel, AvatarImg } from "../rally-shared";
+import { playerPhotoUrl } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useSessions } from "../hooks/useSessions";
@@ -14,6 +15,26 @@ import type { ApiCourt } from "../api/courts";
 import type { Sport, AvailabilityOverrideDTO } from "../types";
 
 const RATINGS = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
+
+/** Center-crop a picked image to a square and re-encode as a small JPEG data
+    URL — keeps uploads ~30 KB no matter what the camera produced. */
+async function squareJpegDataUrl(file: File, side = 256): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = side;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, side, side);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 const AVAIL_BANDS = ["MORN", "AFT", "EVE"];
 const AVAIL_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -165,7 +186,7 @@ function EditProfileModal({ initial, courtOptions, onClose, onSave }: EditModalP
 }
 
 function ProfilePage() {
-  const { user: authUser, updateProfile } = useAuth();
+  const { user: authUser, updateProfile, updatePhoto } = useAuth();
   const { show } = useToast();
   const [editOpen, setEditOpen] = useState(false);
 
@@ -259,6 +280,37 @@ function ProfilePage() {
     }
   };
 
+  // Profile photo: pick a file, center-crop + shrink client-side, upload.
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const onPhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { show("Pick an image file", "error"); return; }
+    if (file.size > 10 * 1024 * 1024) { show("That image is too big — 10 MB max", "error"); return; }
+    setPhotoBusy(true);
+    try {
+      await updatePhoto(await squareJpegDataUrl(file));
+      show("Profile photo updated", "success");
+    } catch (err: any) {
+      show(err?.message || "Couldn't read that image — try a JPEG or PNG", "error");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+  const removePhoto = async () => {
+    setPhotoBusy(true);
+    try {
+      await updatePhoto(null);
+      show("Photo removed", "success");
+    } catch (err: any) {
+      show(err?.message || "Couldn't remove photo", "error");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   // Date-specific tweaks over the weekly grid ("busy THIS Saturday"). Edits
   // build in a draft and save in one PATCH, so quick taps never race requests.
   const ovrSaved = authUser?.availabilityOverrides ?? [];
@@ -321,7 +373,32 @@ function ProfilePage() {
               <div className="hero-avatar"
                 style={authUser?.avatarColor ? { background: authUser.avatarColor, color: authUser.avatarFg || "#fff" } : undefined}>
                 {authUser?.initials ?? "P"}
+                {authUser?.photoVersion && (
+                  <AvatarImg src={playerPhotoUrl(authUser.id, authUser.photoVersion)!} alt={authUser.name} />
+                )}
               </div>
+              <button
+                type="button"
+                className="hero-photo-btn"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoBusy}
+                title={authUser?.photoVersion ? "Change profile photo" : "Add profile photo"}
+                aria-label={authUser?.photoVersion ? "Change profile photo" : "Add profile photo"}
+              >
+                {photoBusy ? <Spinner /> : <Icon name="image" size={15} />}
+              </button>
+              {authUser?.photoVersion ? (
+                <button type="button" className="hero-photo-remove" onClick={removePhoto} disabled={photoBusy}>
+                  Remove photo
+                </button>
+              ) : null}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={onPhotoPick}
+              />
             </div>
 
             <div className="hero-info">
@@ -573,7 +650,10 @@ function ProfilePage() {
                 <div className="saved-player-list">
                   {savedPlayers.map((p) => (
                     <div key={p.id} className="saved-player">
-                      <span className="avatar-chip" style={{ background: p.color || "var(--bg-3)" }}>{p.initials}</span>
+                      <span className="avatar-chip" style={{ background: p.color || "var(--bg-3)" }}>
+                        {p.initials}
+                        {p.photoVersion && <AvatarImg src={playerPhotoUrl(p.id, p.photoVersion)!} alt={p.name} />}
+                      </span>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div className="sp-name">{p.name}</div>
                         <div className="sp-meta">{p.sports.join(" · ") || p.primarySport}</div>
