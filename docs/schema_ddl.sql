@@ -26,6 +26,17 @@ CREATE TABLE appointment_participants (
 	FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
+CREATE TABLE availability_overrides (
+	id INTEGER NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	date DATE NOT NULL, 
+	time_band VARCHAR(10) NOT NULL, 
+	status INTEGER NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_user_date_band UNIQUE (user_id, date, time_band), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
 CREATE TABLE availability_slots (
 	id INTEGER NOT NULL, 
 	user_id INTEGER NOT NULL, 
@@ -176,6 +187,15 @@ CREATE TABLE time_proposals (
 	FOREIGN KEY(proposed_by_id) REFERENCES users (id)
 );
 
+CREATE TABLE user_photos (
+	user_id INTEGER NOT NULL, 
+	mime VARCHAR(30) NOT NULL, 
+	data BLOB NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (user_id), 
+	FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
 CREATE TABLE user_reports (
 	id INTEGER NOT NULL, 
 	reporter_id INTEGER NOT NULL, 
@@ -215,4 +235,3 @@ CREATE TABLE users (
 	PRIMARY KEY (id), 
 	UNIQUE (handle)
 );
-

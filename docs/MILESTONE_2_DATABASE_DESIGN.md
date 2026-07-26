@@ -4,7 +4,7 @@
 Author: Phoebe Wang · ACIS 498 Capstone, Northwestern University
 Repository: https://github.com/phoebewong214/rallypoint
 
-RallyPoint's data layer is a **SQLAlchemy ORM** model over **15 relational
+RallyPoint's data layer is a **SQLAlchemy ORM** model over **17 relational
 tables**. It runs on **SQLite in development** and **PostgreSQL in production**
 — the same ORM code drives both, switched by a single `DATABASE_URL` environment
 variable (no code change). This document is the full schema: every table, its
@@ -70,6 +70,15 @@ alongside this file as **`schema_ddl.sql`**.
 **Reading the diagram:** `1 ─── *` = one-to-many. `uq(...)` = a unique
 constraint (composite where multiple columns are listed). Every `FK` is a
 foreign key into the referenced table's primary key.
+
+Two more `users`-owned tables extend the model (added after the core, so
+`create_all` adds them on deploy without touching existing tables) — omitted from
+the diagram above only to keep it legible, fully specified in §3.16–3.17:
+
+- **`availability_overrides`** (1 `users` → * overrides) — date-specific
+  exceptions to the weekly `availability_slots` grid ("busy *this* Saturday").
+- **`user_photos`** (1 `users` → 0..1 photo) — one optional profile photo per
+  user, stored inline as bytes.
 
 ---
 
@@ -323,6 +332,42 @@ endpoint **upserts** this row, so a verdict is stable across page loads.
 | `resolved_by_id` | INTEGER | **FK → users.id** | |
 | `resolution_note` | TEXT | | |
 
+### 3.16 `availability_overrides` — date-specific availability exceptions
+A tweak to the weekly grid for one concrete calendar date ("busy *this* Saturday
+morning", "free on July 30 for once"). Effective availability for a date = the
+override when one exists, else the weekly `availability_slots` cell for that
+weekday. Rows expire naturally as dates pass.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | INTEGER | **PK** | |
+| `user_id` | INTEGER | NOT NULL, **FK → users.id**, indexed | |
+| `date` | DATE | NOT NULL | A plain calendar date (no time-of-day) |
+| `time_band` | VARCHAR(10) | NOT NULL | "MORN" \| "AFT" \| "EVE" |
+| `status` | INTEGER | NOT NULL, default 0 | 0 = unavailable, 1 = maybe, 2 = available |
+
+**Constraint:** `UNIQUE(user_id, date, time_band)` — one override per date-slot.
+Written via `PATCH /api/auth/me` (`availabilityOverrides` replaces the whole set,
+like the weekly grid).
+
+### 3.17 `user_photos` — profile photos (one optional per user)
+One profile photo per user, stored **inline in the database** as bytes. The
+client center-crops/resizes to a ~256 px JPEG (~30 KB) before upload, which keeps
+avatars off external object storage — Render's disk is ephemeral, so the DB is
+the only durable place. The `data` blob is *deferred* so list queries can read
+the cache-busting version without dragging the bytes along.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `user_id` | INTEGER | **PK**, **FK → users.id** | The PK *is* the user id → 0..1 photo per user |
+| `mime` | VARCHAR(30) | NOT NULL | image/jpeg \| image/png \| image/webp |
+| `data` | LargeBinary (BLOB) | NOT NULL, *deferred* | The raw image bytes |
+| `updated_at` | DATETIME | default now, on-update now | Drives `photoVersion` (a `?v=` cache-buster) |
+
+Written via `PUT /api/auth/me/photo` (upsert) and cleared via
+`DELETE /api/auth/me/photo` or `DELETE /api/admin/users/<id>/photo`; served
+publicly as image bytes by `GET /api/players/<id>/photo`.
+
 ---
 
 ## 4. Indexes & constraints summary
@@ -334,6 +379,8 @@ endpoint **upserts** this row, so a verdict is stable across page loads.
 | `users` | `email`, `handle` | One account per email; unique @handle |
 | `sport_profiles` | `(user_id, sport)` | One profile per sport per user |
 | `availability_slots` | `(user_id, day_of_week, time_band)` | One grid cell per slot |
+| `availability_overrides` | `(user_id, date, time_band)` | One override per date-slot |
+| `user_photos` | `user_id` (primary key) | At most one photo per user |
 | `courts` | `slug` | Unique URL id |
 | `court_favorites` | `(user_id, court_id)` | No duplicate favorites |
 | `court_checkins` | `(court_id, user_id)` | One active check-in per court |
@@ -347,9 +394,9 @@ indexed — `sessions.host_id/guest_id`, `game_invites.inviter_id/invitee_id/pha
 and the `status` columns on `user_reports` / `support_tickets`.
 
 **Referential integrity:** every relationship is a real `FOREIGN KEY`. Owned
-child collections (`sport_profiles`, `availability_slots`, `time_proposals`,
-`appointment_participants`) use `cascade="all, delete-orphan"` so deleting the
-parent cleans up its children.
+child collections (`sport_profiles`, `availability_slots`, `availability_overrides`,
+`time_proposals`, `appointment_participants`, and the `user_photos` row) use
+`cascade="all, delete-orphan"` so deleting the parent cleans up its children.
 
 ---
 

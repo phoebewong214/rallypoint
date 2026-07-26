@@ -35,8 +35,8 @@ Close noisy apps; phone on silent.
 ### Section 1 — Intro (45s)
 > "Hi, I'm Phoebe. This is Milestone 2 of my capstone, RallyPoint — an
 > AI-powered tennis and pickleball partner-matching app. Milestone 1 was the
-> React front end; today is the **backend**: a Flask REST API with 55 endpoints
-> over a 15-table SQLAlchemy database, JWT auth, Pydantic validation, and an
+> React front end; today is the **backend**: a Flask REST API with 59 endpoints
+> over a 17-table SQLAlchemy database, JWT auth, Pydantic validation, and an
 > explainable AI matching service."
 
 Show the README architecture diagram briefly.
@@ -51,7 +51,7 @@ appointments, invites, admin, support.
 ### Section 3 — Database schema (90s) ⭐
 Open `MILESTONE_2_DATABASE_DESIGN.md` and show the ER diagram, then the
 `models/` folder.
-> "The schema is 15 tables. A few design choices I want to call out:"
+> "The schema is 17 tables. A few design choices I want to call out:"
 - `user.py` → "Profiles are **per sport** — `sport_profiles` — so someone can be
   a 4.0 tennis player and a 3.0 pickleball player."
 - `session_model.py` → "A session links two users, host and guest, with a
@@ -104,15 +104,15 @@ Scroll through and narrate a few:
 ```bash
 pytest -v
 ```
-Pause on `120 passed`.
-> "120 automated tests across 14 files cover the whole surface — auth, matching,
+Pause on `124 passed`.
+> "124 automated tests across 14 files cover the whole surface — auth, matching,
 > sessions, invites, appointments, courts, admin, support — plus the security
 > invariants. They run on every push via GitHub Actions."
 
 ### Section 8 — Close (20s)
-> "That's the Milestone 2 backend: 55 endpoints, 15 tables, JWT auth, Pydantic
+> "That's the Milestone 2 backend: 59 endpoints, 17 tables, JWT auth, Pydantic
 > validation, explainable AI matching, all integrated with the database and
-> verified by 120 tests and a live per-operation demo. Thanks for watching."
+> verified by 124 tests and a live per-operation demo. Thanks for watching."
 
 **Stop recording.**
 
