@@ -45,6 +45,11 @@ export const authApi = {
   updateMe: (body: UpdateProfileBody) =>
     api<{ user: User }>("/auth/me", { method: "PATCH", body }),
 
+  // Profile photo: a small base64 data URL (client resizes before upload).
+  setPhoto: (dataUrl: string) =>
+    api<{ user: User }>("/auth/me/photo", { method: "PUT", body: { dataUrl } }),
+  removePhoto: () => api<{ user: User }>("/auth/me/photo", { method: "DELETE" }),
+
   // Clear the auth cookies on this device.
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
 

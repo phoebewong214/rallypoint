@@ -28,6 +28,8 @@ export interface AuthState {
   logoutEverywhere: () => Promise<void>;
   refreshUser: () => Promise<User | null>;
   updateProfile: (patch: ProfilePatch) => Promise<User>;
+  /** Set (data URL) or remove (null) the profile photo. */
+  updatePhoto: (dataUrl: string | null) => Promise<User>;
 }
 
 export interface ProfilePatch {
@@ -168,6 +170,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return fresh;
   }, []);
 
+  const updatePhoto = useCallback(async (dataUrl: string | null) => {
+    const { user: fresh } = dataUrl
+      ? await authApi.setPhoto(dataUrl)
+      : await authApi.removePhoto();
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(fresh));
+    setUser(fresh);
+    return fresh;
+  }, []);
+
   const value = useMemo<AuthState>(
     () => ({
       user,
@@ -179,8 +190,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logoutEverywhere,
       refreshUser,
       updateProfile,
+      updatePhoto,
     }),
-    [user, isLoading, login, signup, logout, logoutEverywhere, refreshUser, updateProfile]
+    [user, isLoading, login, signup, logout, logoutEverywhere, refreshUser, updateProfile, updatePhoto]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

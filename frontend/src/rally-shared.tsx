@@ -7,6 +7,7 @@ import type { IconName, NavId } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
 import { useSessions } from "./hooks/useSessions";
+import { playerPhotoUrl } from "./api/client";
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke"> & {
   name: IconName;
@@ -100,6 +101,9 @@ export interface AvatarProps {
   color?: string;
   fg?: string;
   online?: boolean;
+  /** Profile photo URL (from playerPhotoUrl). Falls back to initials while
+      loading or if the image fails. */
+  photoUrl?: string | null;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -109,6 +113,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   color,
   fg,
   online,
+  photoUrl,
 }) => {
   const inits =
     initials ||
@@ -123,8 +128,25 @@ export const Avatar: React.FC<AvatarProps> = ({
   return (
     <div className={"avatar size-" + size} style={{ background: pal.bg, color: pal.fg }}>
       {inits}
+      {photoUrl && <AvatarImg src={photoUrl} alt={name || inits} />}
       {online && <span className="online" title="Online" />}
     </div>
+  );
+};
+
+/* The photo layer inside any avatar shape: covers the initials when it loads,
+   removes itself on error so the initials show through. */
+export const AvatarImg: React.FC<{ src: string; alt?: string }> = ({ src, alt = "" }) => {
+  const [broken, setBroken] = useState(false);
+  if (broken) return null;
+  return (
+    <img
+      className="avatar-img"
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setBroken(true)}
+    />
   );
 };
 
@@ -222,7 +244,10 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
             <>
               <Link className="nav-pill" to="/profile">
                 <span>{user.name}</span>
-                <div className="nav-avatar">{user.initials}</div>
+                <div className="nav-avatar">
+                  {user.initials}
+                  {user.photoVersion && <AvatarImg src={playerPhotoUrl(user.id, user.photoVersion)!} />}
+                </div>
               </Link>
               <button
                 type="button"
@@ -246,6 +271,7 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
           {showUser && user && (
             <Link to="/profile" className="nav-avatar" aria-label="Open profile">
               {user.initials}
+              {user.photoVersion && <AvatarImg src={playerPhotoUrl(user.id, user.photoVersion)!} />}
             </Link>
           )}
           <button

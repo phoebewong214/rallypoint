@@ -19,6 +19,11 @@ function resolveApiBase(): string {
 
 const API_BASE = resolveApiBase();
 
+/** URL for a player's profile photo (null when they have none). Public GET —
+    <img> tags can't send the cross-site auth cookie; ?v busts caches. */
+export const playerPhotoUrl = (id: number | string, version?: number | null) =>
+  version ? `${API_BASE}/players/${id}/photo?v=${version}` : null;
+
 const CSRF_COOKIE = "rp_csrf";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 

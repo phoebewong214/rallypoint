@@ -19,6 +19,7 @@ from extensions import db
 from models import (
     User,
     SportProfile,
+    UserPhoto,
     Court,
     CourtFavorite,
     CourtCheckIn,
@@ -436,6 +437,27 @@ def update_user(user_id: int):
             current_app.logger.warning("admin resend-verification failed for %s: %s", user.id, e)
 
     return jsonify({"user": _admin_user_dict(user)})
+
+
+@admin_bp.delete("/users/<int:user_id>/photo")
+@require_admin
+def remove_user_photo(user_id: int):
+    """
+    Trust & safety: strip a user's profile photo (they fall back to the
+    initials avatar and can upload a new one).
+    ---
+    tags: [Admin]
+    security:
+      - Bearer: []
+    responses:
+      200: {description: Photo removed (idempotent)}
+      404: {description: Unknown user}
+    """
+    if not db.session.get(User, user_id):
+        return jsonify({"error": "Unknown user"}), 404
+    UserPhoto.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @admin_bp.delete("/users/<int:user_id>")

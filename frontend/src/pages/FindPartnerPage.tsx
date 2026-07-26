@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Sport } from "../types";
-import { TopNav, Icon, ratingLabel } from "../rally-shared";
+import { TopNav, Icon, ratingLabel, AvatarImg } from "../rally-shared";
+import { playerPhotoUrl } from "../api/client";
 import { usePlayers } from "../hooks/usePlayers";
 import { useCourts } from "../hooks/useCourts";
 import { useToggleSavedPlayer } from "../hooks/useSavedPlayers";
@@ -393,6 +394,7 @@ function PlayerCard({ player, requested, saved, onRequest, onSave, onReport }) {
       <div className="card-top">
         <div className="avatar size-md" style={{ background: player.color, color: player.fg }}>
           {player.initials}
+          {player.photoVersion && <AvatarImg src={playerPhotoUrl(player.id, player.photoVersion)!} alt={player.name} />}
         </div>
         <div className="name-wrap">
           <h3 className="name">{player.name}</h3>
@@ -630,6 +632,7 @@ function FindPartnerPage() {
         return {
           id: p.id, name: p.name, initials: p.initials, color: p.color, fg: p.fg,
           online: p.online, location: p.location, distance: p.distance,
+          photoVersion: p.photoVersion ?? null,
           sport: applied.sport, ntrp: p.ntrp, availability: p.availability,
           availabilitySlots: p.availabilitySlots ?? [],
           availabilityOverrides: p.availabilityOverrides ?? [],

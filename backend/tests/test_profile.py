@@ -172,3 +172,54 @@ def test_overrides_surface_in_players_payload(client):
     row = next(p for p in client.get("/api/players?sport=Tennis", headers=_h(tok_a)).get_json()["players"]
                if p["id"] == bid)
     assert row["availabilityOverrides"] == [{"date": tomorrow, "timeBand": "EVE", "status": 2}]
+
+
+# A real 1x1 PNG so the photo pipeline handles genuine image bytes.
+_TINY_PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8"
+                 "z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_TINY_PNG_URL = "data:image/png;base64," + _TINY_PNG_B64
+
+
+def test_photo_upload_serve_and_delete(client):
+    import base64
+    tok, uid = _signup(client, "photo@rally.app")
+    h = _h(tok)
+
+    # Upload: photoVersion appears on the user payload.
+    r = client.put("/api/auth/me/photo", headers=h, json={"dataUrl": _TINY_PNG_URL})
+    assert r.status_code == 200, r.get_json()
+    ver = r.get_json()["user"]["photoVersion"]
+    assert isinstance(ver, int)
+
+    # Serving is public (no auth header) with the right mime + bytes.
+    img = client.get(f"/api/players/{uid}/photo")
+    assert img.status_code == 200
+    assert img.headers["Content-Type"] == "image/png"
+    assert img.data == base64.b64decode(_TINY_PNG_B64)
+    assert "max-age" in img.headers.get("Cache-Control", "")
+
+    # Other players see the version in the matchmaking payload.
+    tok_b, _ = _signup(client, "photoviewer@rally.app")
+    row = next(p for p in client.get("/api/players?sport=Pickleball", headers=_h(tok_b)).get_json()["players"]
+               if p["id"] == uid)
+    assert row["photoVersion"] == ver
+
+    # Delete: back to the initials avatar, serving 404s.
+    r2 = client.delete("/api/auth/me/photo", headers=h)
+    assert r2.status_code == 200
+    assert r2.get_json()["user"]["photoVersion"] is None
+    assert client.get(f"/api/players/{uid}/photo").status_code == 404
+
+
+def test_photo_upload_rejects_bad_input(client):
+    tok, _ = _signup(client, "badphoto@rally.app")
+    h = _h(tok)
+    # Not a data URL at all.
+    assert client.put("/api/auth/me/photo", headers=h, json={"dataUrl": "https://x.test/a.png"}).status_code == 422
+    # Unsupported subtype.
+    assert client.put("/api/auth/me/photo", headers=h,
+                      json={"dataUrl": "data:image/gif;base64," + _TINY_PNG_B64}).status_code == 422
+    # Decoded payload over the 500 KB ceiling.
+    import base64
+    big = "data:image/jpeg;base64," + base64.b64encode(b"\0" * 500_001).decode()
+    assert client.put("/api/auth/me/photo", headers=h, json={"dataUrl": big}).status_code == 413
