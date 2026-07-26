@@ -33,7 +33,8 @@ from models import User, SportProfile, Court    # noqa: E402
 
 # Every table we track for the "database delta" evidence lines.
 TABLES = [
-    "users", "sport_profiles", "availability_slots", "courts", "court_favorites",
+    "users", "sport_profiles", "availability_slots", "availability_overrides",
+    "user_photos", "courts", "court_favorites",
     "court_checkins", "court_appointments", "appointment_participants",
     "saved_players", "sessions", "game_invites", "time_proposals",
     "ai_match_logs", "user_reports", "support_tickets",
@@ -41,6 +42,11 @@ TABLES = [
 
 FUTURE = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
 FUTURE2 = (datetime.utcnow() + timedelta(days=8)).replace(microsecond=0).isoformat()
+# A concrete future date for a date-specific availability override (busy that day).
+OVERRIDE_DATE = (datetime.utcnow().date() + timedelta(days=10)).isoformat()
+# A tiny valid 1x1 PNG as a base64 data URL, for the profile-photo upload demo.
+TINY_PNG = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+            "AAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 
 
 class DemoConfig(Config):
@@ -115,7 +121,9 @@ def call(title, method, path, *, headers=None, body=None, note=None,
         print("  request body:")
         for line in j(body).splitlines():
             print(f"    {line}")
-    payload = rsp.get_json()
+    payload = rsp.get_json(silent=True)  # None for non-JSON (e.g. served image bytes)
+    if show_resp and payload is None and rsp.content_type and not rsp.is_json:
+        print(f"  response body: <{len(rsp.data)} bytes, Content-Type: {rsp.content_type}>")
     if show_resp and payload is not None:
         text = j(payload)
         # Trim very long list responses so the transcript stays readable.
@@ -197,15 +205,29 @@ def main():
 
     call("Who am I? (GET /auth/me, read-only)", "GET", "/api/auth/me", headers=ah)
 
-    call("Update my profile + weekly availability (UPDATE users, INSERT slots)",
+    call("Update my profile + weekly availability + a date-specific override "
+         "(UPDATE users, INSERT availability_slots, INSERT availability_overrides)",
          "PATCH", "/api/auth/me", headers=ah,
          body={"bio": "4.0-ish dinker, quick hands at the net.",
                "location": "Gold Coast, Chicago",
                "availability": [
                    {"dayOfWeek": 5, "timeBand": "MORN", "status": 2},
                    {"dayOfWeek": 6, "timeBand": "MORN", "status": 2},
-                   {"dayOfWeek": 2, "timeBand": "EVE", "status": 1}]},
+                   {"dayOfWeek": 2, "timeBand": "EVE", "status": 1}],
+               # date-specific tweak over the weekly grid: busy THIS date's morning
+               "availabilityOverrides": [
+                   {"date": OVERRIDE_DATE, "timeBand": "MORN", "status": 0}]},
          watch=(f"SELECT id, location, bio FROM users WHERE id={alex_id}", {}))
+
+    call("Upload a profile photo (INSERT user_photos; photoVersion bumps)",
+         "PUT", "/api/auth/me/photo", headers=ah, body={"dataUrl": TINY_PNG},
+         watch=(f"SELECT user_id, mime FROM user_photos WHERE user_id={alex_id}", {}))
+
+    call("Serve that photo publicly — no auth, returns image bytes (read-only)",
+         "GET", f"/api/players/{alex_id}/photo", headers={}, show_resp=False)
+
+    call("Remove the profile photo (DELETE user_photos; back to initials avatar)",
+         "DELETE", "/api/auth/me/photo", headers=ah)
 
     # ---- PLAYERS / MATCHING -------------------------------------------------
     call("AI-ranked partner list for the viewer (read-only GET; scores inline)",

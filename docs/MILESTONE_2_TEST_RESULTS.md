@@ -7,9 +7,9 @@ Repository: https://github.com/phoebewong214/rallypoint
 This document is the testing evidence for the RallyPoint backend. It has two
 parts:
 
-1. **Automated test suite** — 120 pytest cases across 14 files, all passing,
+1. **Automated test suite** — 124 pytest cases across 14 files, all passing,
    covering the full API surface and its security invariants.
-2. **Live API demonstration** — a scripted 36-call end-to-end run that shows,
+2. **Live API demonstration** — a scripted 39-call end-to-end run that shows,
    **after every single write operation, the exact change in the database**
    (row inserted/deleted, or the affected row's fields before → after). This
    satisfies the requirement to demonstrate the database update after *each* REST
@@ -37,10 +37,10 @@ same suite runs in CI on every push (`.github/workflows/ci.yml`).
 ### 1.2 Result
 
 ```
-============================= 120 passed in 34.80s =============================
+============================= 124 passed in 31.30s =============================
 ```
 
-**120 passed, 0 failed.** Full verbose output is captured in
+**124 passed, 0 failed.** Full verbose output is captured in
 `docs/pytest_output.txt`.
 
 ### 1.3 Coverage by area
@@ -50,8 +50,8 @@ same suite runs in CI on every push (`.github/workflows/ci.yml`).
 | `test_auth.py` | 22 | Signup/login, JWT issue+verify, httpOnly cookie + CSRF, email verification, password reset, logout-all/token revocation, coordinate rounding, unique handles |
 | `test_invites.py` | 14 | Two-phase invite lifecycle, turn logic, idempotency, window vs specific time, materialization into a session |
 | `test_admin.py` | 13 | Admin auth gate, user search/paginate/filter, edit, self-suspend guard, "can't grant admin via API" |
+| `test_profile.py` | 13 | Profile PATCH, sport-profile upsert/remove, weekly-grid replace, **date-specific availability overrides**, **profile-photo upload/serve/remove** |
 | `test_sessions.py` | 9 | Request→accept→reschedule→cancel, viewer-relative status, duplicate guard, opponent payload |
-| `test_profile.py` | 9 | Profile PATCH, sport-profile upsert/remove, availability grid replace |
 | `test_reports.py` | 8 | Filing reports, collapse of repeat reports, admin review + suspend-in-one-step |
 | `test_admin_courts.py` | 8 | Court CRUD, soft-close, slug uniqueness |
 | `test_courts.py` | 7 | Court list + real Haversine distance, favorites toggle, court-scoped session |
@@ -61,7 +61,7 @@ same suite runs in CI on every push (`.github/workflows/ci.yml`).
 | `test_admin_user_delete.py` | 5 | Account deletion, self-delete guard, cascade behavior |
 | `test_support_desk.py` | 4 | Admin ticket desk, resolve/reopen, history round-trip |
 | `test_appointments.py` | 4 | Open-game create/join/**waitlist/promote**, host-only cancel, check-in distance guard |
-| **Total** | **120** | |
+| **Total** | **124** | |
 
 ### 1.4 Representative test cases (input → expected → result)
 
@@ -104,14 +104,14 @@ python api_demo.py > ../docs/api_demo_output.txt
 
 `api_demo.py` is self-contained: it builds a **fresh SQLite database**, seeds two
 players (`alex`, an admin, and `maya`) plus one court (`grant-park`), then
-exercises **36 API calls** covering every functional area. After each call it
+exercises **39 API calls** covering every functional area. After each call it
 prints:
 
 ```
 request body  ->  HTTP status + response body  ->  DB DELTA (+ ROW BEFORE/AFTER)
 ```
 
-The `DB DELTA` line is computed by counting rows in all 15 tables immediately
+The `DB DELTA` line is computed by counting rows in all 17 tables immediately
 before and after the call. For in-place UPDATEs (which don't change row counts),
 a `ROW BEFORE` / `ROW AFTER` pair shows the exact column values that changed.
 
@@ -126,37 +126,40 @@ The complete transcript is `docs/api_demo_output.txt`. Highlights follow.
 | 3 | Bad login | 401 | none |
 | 4 | Invalid signup | 422 | none (structured field errors) |
 | 5 | GET /auth/me | 200 | none (read) |
-| 6 | PATCH profile + availability | 200 | `availability_slots 0→3 (+3)`; row: `location "The Loop" → "Gold Coast"`, `bio` updated |
-| 7 | GET /players (AI ranked) | 200 | none (read; score computed inline) |
-| 8 | Save player | 200 | `saved_players 0→1 (+1)` |
-| 9 | Un-save player | 200 | `saved_players 1→0 (−1)` |
-| 10 | Report player | 201 | `user_reports 0→1 (+1)` |
-| 11 | AI match-reason | 200 | `ai_match_logs 0→1 (+1)` |
-| 12 | AI match-reason (again) | 200 | none — **upsert**, no duplicate row |
-| 13 | Create session (request) | 201 | `sessions 0→1 (+1)`, `status=pending` |
-| 14 | Duplicate request | 409 | none — returns the existing session |
-| 15 | Accept session | 200 | row: `status pending → confirmed` |
-| 16 | Reschedule | 200 | row: `host/guest swapped`, new time, `status → pending` |
-| 17 | GET /sessions | 200 | none (read) |
-| 18 | Cancel session | 200 | row: `status → cancelled` (kept as a trace) |
-| 19 | GET /courts | 200 | none (read; real distance) |
-| 20 | Favorite court | 200 | `court_favorites 0→1 (+1)` |
-| 21 | Check in | 200 | `court_checkins 0→1 (+1)` |
-| 22 | Create open game | 201 | `court_appointments 0→1 (+1); appointment_participants 0→1 (+1)` |
-| 23 | Maya joins | 200 | `appointment_participants 1→2 (+1)` |
-| 24 | Casey joins (full) | 200 | `appointment_participants 2→3 (+1)` — **waitlisted** |
-| 25 | Maya leaves | 200 | `appointment_participants 3→2 (−1)` — Casey **promoted** off waitlist |
-| 26 | Check out | 200 | `court_checkins 1→0 (−1)` |
-| 27 | Create invite (window) | 201 | `game_invites 0→1 (+1); time_proposals 0→1 (+1)` |
-| 28 | Confirm opponent | 200 | row: `phase awaiting_opponent → settling_time` |
-| 29 | Propose specific time | 200 | `time_proposals 1→2 (+1)` (old one superseded) |
-| 30 | Accept time | 200 | `sessions 1→2 (+1)`; invite row: `phase → confirmed, session_id → 2` |
-| 31 | Escalate support | 200 | `support_tickets 0→1 (+1)` |
-| 32 | Admin overview | 200 | none (read aggregate) |
-| 33 | Admin list users | 200 | none (read) |
-| 34 | Admin list reports | 200 | none (read) |
-| 35 | Admin review report + suspend | 200 | report row: `status open → reviewed`; user `is_active 1 → 0` |
-| 36 | Admin close ticket | 200 | ticket row: `status open → closed`, `resolution_note` set |
+| 6 | PATCH profile + weekly availability + **date override** | 200 | `availability_slots 0→3 (+3); availability_overrides 0→1 (+1)`; row: `location "The Loop" → "Gold Coast"`, `bio` updated |
+| 7 | **Upload profile photo** | 200 | `user_photos 0→1 (+1)` (photoVersion bumps) |
+| 8 | **Serve that photo publicly** | 200 | none (read; returns image bytes, no auth) |
+| 9 | **Remove profile photo** | 200 | `user_photos 1→0 (−1)` |
+| 10 | GET /players (AI ranked) | 200 | none (read; score computed inline) |
+| 11 | Save player | 200 | `saved_players 0→1 (+1)` |
+| 12 | Un-save player | 200 | `saved_players 1→0 (−1)` |
+| 13 | Report player | 201 | `user_reports 0→1 (+1)` |
+| 14 | AI match-reason | 200 | `ai_match_logs 0→1 (+1)` |
+| 15 | AI match-reason (again) | 200 | none — **upsert**, no duplicate row |
+| 16 | Create session (request) | 201 | `sessions 0→1 (+1)`, `status=pending` |
+| 17 | Duplicate request | 409 | none — returns the existing session |
+| 18 | Accept session | 200 | row: `status pending → confirmed` |
+| 19 | Reschedule | 200 | row: `host/guest swapped`, new time, `status → pending` |
+| 20 | GET /sessions | 200 | none (read) |
+| 21 | Cancel session | 200 | row: `status → cancelled` (kept as a trace) |
+| 22 | GET /courts | 200 | none (read; real distance) |
+| 23 | Favorite court | 200 | `court_favorites 0→1 (+1)` |
+| 24 | Check in | 200 | `court_checkins 0→1 (+1)` |
+| 25 | Create open game | 201 | `court_appointments 0→1 (+1); appointment_participants 0→1 (+1)` |
+| 26 | Maya joins | 200 | `appointment_participants 1→2 (+1)` |
+| 27 | Casey joins (full) | 200 | `appointment_participants 2→3 (+1)` — **waitlisted** |
+| 28 | Maya leaves | 200 | `appointment_participants 3→2 (−1)` — Casey **promoted** off waitlist |
+| 29 | Check out | 200 | `court_checkins 1→0 (−1)` |
+| 30 | Create invite (window) | 201 | `game_invites 0→1 (+1); time_proposals 0→1 (+1)` |
+| 31 | Confirm opponent | 200 | row: `phase awaiting_opponent → settling_time` |
+| 32 | Propose specific time | 200 | `time_proposals 1→2 (+1)` (old one superseded) |
+| 33 | Accept time | 200 | `sessions 1→2 (+1)`; invite row: `phase → confirmed, session_id → 2` |
+| 34 | Escalate support | 200 | `support_tickets 0→1 (+1)` |
+| 35 | Admin overview | 200 | none (read aggregate) |
+| 36 | Admin list users | 200 | none (read) |
+| 37 | Admin list reports | 200 | none (read) |
+| 38 | Admin review report + suspend | 200 | report row: `status open → reviewed`; user `is_active 1 → 0` |
+| 39 | Admin close ticket | 200 | ticket row: `status open → closed`, `resolution_note` set |
 
 Every write is accounted for: **INSERTs** show a `+1` (or `+N`) row delta,
 **DELETEs** show `−1`, and **in-place UPDATEs** show the concrete before/after
@@ -171,26 +174,39 @@ STEP 1: Sign up a brand-new account (INSERT users + sport_profiles)
   DB DELTA: users 2->3 (+1 row); sport_profiles 2->3 (+1 row)
 ```
 
+**INSERT (two new tables) — a profile update writes a date-specific override, then a photo upload:**
+```
+STEP 6: Update my profile + weekly availability + a date-specific override
+  PATCH /api/auth/me   ->  HTTP 200
+  DB DELTA: availability_slots 0->3 (+3 rows); availability_overrides 0->1 (+1 row)
+STEP 7: Upload a profile photo (INSERT user_photos; photoVersion bumps)
+  PUT /api/auth/me/photo   ->  HTTP 200
+  DB DELTA: user_photos 0->1 (+1 row)
+STEP 9: Remove the profile photo (DELETE user_photos)
+  DELETE /api/auth/me/photo   ->  HTTP 200
+  DB DELTA: user_photos 1->0 (-1 row)
+```
+
 **UPDATE — accepting a request flips status (no new row):**
 ```
-STEP 15: Maya accepts the request (UPDATE sessions status -> confirmed)
+STEP 18: Maya accepts the request (UPDATE sessions status -> confirmed)
   POST /api/sessions/1/accept   ->  HTTP 200
   DB DELTA: (no row-count change — in-place UPDATE or read-only)
-  ROW BEFORE: {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'pending',   'scheduled_at': '2026-07-22 ...'}
-  ROW AFTER:  {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'confirmed', 'scheduled_at': '2026-07-22 ...'}
+  ROW BEFORE: {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'pending',   'scheduled_at': '...'}
+  ROW AFTER:  {'id': 1, 'host_id': 1, 'guest_id': 2, 'status': 'confirmed', 'scheduled_at': '...'}
 ```
 
 **UPSERT — calling AI match-reason twice does not duplicate the cache row:**
 ```
-STEP 11: On-demand AI match reason, cached (INSERT ai_match_logs)
+STEP 14: On-demand AI match reason, cached (INSERT ai_match_logs)
   DB DELTA: ai_match_logs 0->1 (+1 row)
-STEP 12: Same call again — upserts the cached row (no new row)
+STEP 15: Same call again — upserts the cached row (no new row)
   DB DELTA: (no row-count change — in-place UPDATE or read-only)
 ```
 
 **MATERIALIZE — accepting an invite time creates a confirmed session:**
 ```
-STEP 30: Alex accepts the time -> materializes a confirmed session
+STEP 33: Alex accepts the time -> materializes a confirmed session
   POST /api/invites/1/accept-time   ->  HTTP 200
   DB DELTA: sessions 1->2 (+1 row)
   ROW BEFORE: {'id': 1, 'phase': 'settling_time', 'session_id': None}
@@ -199,7 +215,7 @@ STEP 30: Alex accepts the time -> materializes a confirmed session
 
 **CASCADING UPDATE — resolving a report suspends the reported account:**
 ```
-STEP 35: Admin reviews the report + suspends the account
+STEP 38: Admin reviews the report + suspends the account
   PATCH /api/admin/reports/1   ->  HTTP 200
   ROW BEFORE: {'id': 1, 'status': 'open',     'reported_is_active': 1}
   ROW AFTER:  {'id': 1, 'status': 'reviewed', 'reported_is_active': 0}
@@ -211,6 +227,8 @@ STEP 35: Admin reviews the report + suspends the account
 users                        3
 sport_profiles               3
 availability_slots           3
+availability_overrides       1
+user_photos                  0
 courts                       1
 court_favorites              1
 court_checkins               0
@@ -225,8 +243,9 @@ user_reports                 1
 support_tickets              1
 ```
 
-Total API calls exercised: **36**. Every write above shows its database delta
-inline.
+Total API calls exercised: **39**. Every write above shows its database delta
+inline. (`user_photos` ends at 0 because the run uploads then removes the photo;
+`availability_overrides` ends at 1.)
 
 ---
 
@@ -252,7 +271,7 @@ Beyond the happy path, the suite and demo confirm the API fails *safely*:
 
 | Artifact | Command | Output |
 |---|---|---|
-| Automated tests | `cd backend && pytest -v` | `120 passed` → `docs/pytest_output.txt` |
+| Automated tests | `cd backend && pytest -v` | `124 passed` → `docs/pytest_output.txt` |
 | Live DB-evidence demo | `cd backend && python api_demo.py` | `docs/api_demo_output.txt` |
 | Interactive API docs | `python app.py` then open `/api/docs/` | Swagger UI |
 | Schema DDL | generated by the models | `docs/schema_ddl.sql` |
