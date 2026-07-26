@@ -9,6 +9,7 @@ export interface SavedPlayer {
   location: string | null;
   primarySport: string | null;
   sports: string[];
+  photoVersion?: number | null;
 }
 
 export const savedPlayersApi = {
