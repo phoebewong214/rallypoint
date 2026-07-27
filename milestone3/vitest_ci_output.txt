@@ -1,0 +1,224 @@
+Current runner version: '2.336.0'
+##[group]Runner Image Provisioner
+Hosted Compute Agent
+Version: 20260707.563
+Commit: 02667638d2b423fbc733a8e32a88b44996a3ba6e
+Build Date: 2026-07-07T19:33:50Z
+Worker ID: {4f908078-d956-4819-b511-bfa04e242dd0}
+Azure Region: centralus
+##[endgroup]
+##[group]Operating System
+Ubuntu
+24.04.4
+LTS
+##[endgroup]
+##[group]Runner Image
+Image: ubuntu-24.04
+Version: 20260720.247.2
+Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260720.247/images/ubuntu/Ubuntu2404-Readme.md
+Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260720.247
+##[endgroup]
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+Packages: read
+##[endgroup]
+Secret source: Actions
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+Complete job name: Frontend (build + vitest)
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+##[group]Run actions/checkout@v4
+with:
+  repository: phoebewong214/rallypoint
+  token: ***
+  ssh-strict: true
+  ssh-user: git
+  persist-credentials: true
+  clean: true
+  sparse-checkout-cone-mode: true
+  fetch-depth: 1
+  fetch-tags: false
+  show-progress: true
+  lfs: false
+  submodules: false
+  set-safe-directory: true
+  allow-unsafe-pr-checkout: false
+##[endgroup]
+Syncing repository: phoebewong214/rallypoint
+##[group]Getting Git version info
+Working directory is '/home/runner/work/rallypoint/rallypoint'
+[command]/usr/bin/git version
+git version 2.54.0
+##[endgroup]
+Temporarily overriding HOME='/home/runner/work/_temp/3c01a7a6-da39-4a3e-a4b1-a698e9b2cfa1' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/rallypoint/rallypoint
+Deleting the contents of '/home/runner/work/rallypoint/rallypoint'
+##[group]Initializing the repository
+[command]/usr/bin/git init /home/runner/work/rallypoint/rallypoint
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Initialized empty Git repository in /home/runner/work/rallypoint/rallypoint/.git/
+[command]/usr/bin/git remote add origin https://github.com/phoebewong214/rallypoint
+##[endgroup]
+##[group]Disabling automatic garbage collection
+[command]/usr/bin/git config --local gc.auto 0
+##[endgroup]
+##[group]Setting up auth
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+[command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+##[endgroup]
+##[group]Fetching the repository
+[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6501c044e29cd3a615b778082c6f6fe4b44cf78a:refs/remotes/origin/main
+From https://github.com/phoebewong214/rallypoint
+ * [new ref]         6501c044e29cd3a615b778082c6f6fe4b44cf78a -> origin/main
+##[endgroup]
+##[group]Determining the checkout info
+##[endgroup]
+[command]/usr/bin/git sparse-checkout disable
+[command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+##[group]Checking out the ref
+[command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+Switched to a new branch 'main'
+branch 'main' set up to track 'origin/main'.
+##[endgroup]
+[command]/usr/bin/git log -1 --format=%H
+6501c044e29cd3a615b778082c6f6fe4b44cf78a
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+##[group]Run actions/setup-node@v4
+with:
+  node-version: 20
+  cache: npm
+  cache-dependency-path: frontend/package-lock.json
+  always-auth: false
+  check-latest: false
+  token: ***
+##[endgroup]
+Attempting to download 20...
+(node:2247) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-x64.tar.gz
+Extracting ...
+[command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/8df30b05-92ba-4970-97ed-ba8f98aa22f1 -f /home/runner/work/_temp/f0ae0292-3898-4e79-a464-5bb50548999d
+Adding to the cache ...
+##[group]Environment details
+node: v20.20.2
+npm: 10.8.2
+yarn: 1.22.22
+##[endgroup]
+[command]/opt/hostedtoolcache/node/20.20.2/x64/bin/npm config get cache
+/home/runner/.npm
+Cache hit for: node-cache-Linux-x64-npm-a5d2ff426c08d29a578d84073e869c931c7b645572d939cf7d98de294d5e99f3
+(node:2247) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+Received 45127333 of 45127333 (100.0%), 63.2 MBs/sec
+Cache Size: ~43 MB (45127333 B)
+[command]/usr/bin/tar -xf /home/runner/work/_temp/d7ec9878-b606-4190-9ad1-e4a5f9a2d9de/cache.tzst -P -C /home/runner/work/rallypoint/rallypoint --use-compress-program unzstd
+Cache restored successfully
+Cache restored from key: node-cache-Linux-x64-npm-a5d2ff426c08d29a578d84073e869c931c7b645572d939cf7d98de294d5e99f3
+##[group]Run npm ci
+npm ci
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+
+added 140 packages, and audited 141 packages in 2s
+
+31 packages are looking for funding
+  run `npm fund` for details
+
+5 vulnerabilities (1 moderate, 4 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+##[group]Run npm test
+npm test
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+
+> frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.7 /home/runner/work/rallypoint/rallypoint/frontend
+
+ ✓ src/test/Skeleton.test.tsx (3 tests) 53ms
+ ✓ src/test/AuthContext.test.tsx (4 tests) 238ms
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+   Start at  22:51:35
+   Duration  1.42s (transform 166ms, setup 179ms, import 353ms, tests 291ms, environment 1.48s)
+
+##[group]Run npm run typecheck
+npm run typecheck
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+
+> frontend@0.1.0 typecheck
+> tsc --noEmit
+
+##[group]Run npm run build
+npm run build
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+
+> frontend@0.1.0 build
+> vite build
+
+vite v8.0.14 building client environment for production...
+^[[2K
+transforming...✓ 161 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                            1.05 kB │ gzip:   0.53 kB
+build/assets/CourtsPage-vh-t_kPv.css       15.09 kB │ gzip:   6.36 kB
+build/assets/index-DlhUMmzj.css            79.78 kB │ gzip:  13.80 kB
+build/assets/CourtDetailPage-DkqMg1YE.js   11.51 kB │ gzip:   3.76 kB
+build/assets/AdminPage-Cmq0P3P4.js         34.63 kB │ gzip:   7.81 kB
+build/assets/CourtsPage-DZvTR5kz.js       164.79 kB │ gzip:  48.54 kB
+build/assets/index-Cv67Jb9t.js            404.77 kB │ gzip: 120.16 kB
+
+✓ built in 339ms
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Post job cleanup.
+(node:2426) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Cache hit occurred on the primary key node-cache-Linux-x64-npm-a5d2ff426c08d29a578d84073e869c931c7b645572d939cf7d98de294d5e99f3, not saving cache.
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Post job cleanup.
+[command]/usr/bin/git version
+git version 2.54.0
+Temporarily overriding HOME='/home/runner/work/_temp/9376b116-478b-4582-923a-76b9a77d94db' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/rallypoint/rallypoint
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+http.https://github.com/.extraheader
+[command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Cleaning up orphan processes
+##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
