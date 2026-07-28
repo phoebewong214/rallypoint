@@ -5,13 +5,27 @@ A transparent, explainable heuristic — NOT a black box. Each signal contribute
 points AND a human-readable "reason chip", so the score spreads across the range
 and the UI can show *why* two players match (skill, distance, schedule, court).
 
-Score (0-100), summed from real data:
-  skill closeness   0-45  continuous in |rating diff| (the dominant signal)
-  proximity         0-25  continuous in great-circle miles (0 mi → 25, 8 mi → 0)
-  schedule overlap  0-20  shared available cells in the weekly preferred-times grid
-  shared home court 0-15  same home court for this sport
-  same primary sport  +5
-Tier: great >= 70, good >= 45, else worth-a-try.
+Score (0-100), summed from real data. Weights sum to exactly 100, so the top of
+the range keeps its ranking information (no clamp saturation):
+  skill closeness   0-36  continuous in |rating diff| (the dominant signal)
+  proximity         0-20  continuous in great-circle miles (0 mi → 20, 8 mi → 0)
+  schedule overlap  0-16  shared available cells in the weekly preferred-times grid
+  shared home court 0-12  same home court for this sport
+  semantic style    0-12  cosine similarity of the two bios' embeddings
+  same primary sport  +4
+Tier: great >= 56, good >= 36, else worth-a-try.
+
+SCORE_VERSION history (stored on every AIMatchLog row — never compare scores
+across versions):
+  1  original weights 45/25/20/15/15/+5, clamped at 100 (max possible 125)
+  2  weights renormalized to sum to 100 (above); tiers rescaled ×0.8 (70→56,
+     45→36) so tier semantics are unchanged; semantic signal gated on a
+     minimum bio length
+
+The semantic window maps cosine similarity → points linearly between
+SEMANTIC_SIM_LO (→ 0) and SEMANTIC_SIM_HI (→ full). The defaults are
+uncalibrated guesses — run `python manage.py calibrate-semantic` against real
+data and set the env vars to the printed suggestion (no code change needed).
 
 `llm_reason` is an OPTIONAL upgrade (OpenAI) for the *reason text only*, used by
 /api/ai/match-reason when OPENAI_API_KEY is set — it never affects the score.
@@ -28,8 +42,20 @@ if TYPE_CHECKING:
     from models import User  # pragma: no cover
 
 
+# Bump when the formula/weights change; snapshot rows carry it so outcomes are
+# only ever compared within one scoring regime.
+SCORE_VERSION = 2
+
 # Earth's mean radius in miles. Used by Haversine.
 EARTH_RADIUS_MI = 3958.7613
+
+# Cosine-similarity window for the semantic signal (env-overridable so a
+# calibration run can retune it without a deploy — see calibrate-semantic).
+SEMANTIC_SIM_LO = float(os.environ.get("SEMANTIC_SIM_LO", "0.45"))
+SEMANTIC_SIM_HI = float(os.environ.get("SEMANTIC_SIM_HI", "0.75"))
+# Embeddings of near-empty bios ("I like tennis") are mostly noise — skip the
+# signal unless both sides wrote at least this much.
+MIN_BIO_CHARS = 30
 
 
 def haversine_miles(
@@ -66,8 +92,8 @@ def _skill_points(a: str | None, b: str | None, label: str) -> tuple[int, Option
         diff = abs(float(a) - float(b))
     except (TypeError, ValueError):
         return 0, None
-    # Linear decay: 0.0 diff → 45, 1.5+ diff → 0. Skill is the dominant signal.
-    pts = round(45 * max(0.0, 1 - diff / 1.5))
+    # Linear decay: 0.0 diff → 36, 1.5+ diff → 0. Skill is the dominant signal.
+    pts = round(36 * max(0.0, 1 - diff / 1.5))
     if diff == 0:
         return pts, f"Same level ({label} {b})"
     if diff <= 0.5:
@@ -79,11 +105,11 @@ def _skill_points(a: str | None, b: str | None, label: str) -> tuple[int, Option
 
 def _proximity_points(dist: Optional[float], viewer: "User", cand: "User") -> tuple[int, Optional[str]]:
     if dist is not None:
-        pts = round(25 * max(0.0, 1 - dist / 8.0))  # 0 mi → 25, 8 mi → 0
+        pts = round(20 * max(0.0, 1 - dist / 8.0))  # 0 mi → 20, 8 mi → 0
         return pts, (f"{dist:.1f} mi away" if dist <= 5 else None)
     # No coordinates → fall back to same neighborhood/location string.
     if viewer.location and cand.location and viewer.location == cand.location:
-        return 12, f"Both in {cand.location.split(',')[0]}"
+        return 10, f"Both in {cand.location.split(',')[0]}"
     return 0, None
 
 
@@ -95,58 +121,70 @@ def _schedule_points(viewer: "User", cand: "User") -> tuple[int, Optional[str]]:
     n = len(v & c)
     if n == 0:
         return 0, None
-    return min(20, n * 4), f"{n} shared time slot{'s' if n != 1 else ''}"
+    return min(16, round(n * 3.2)), f"{n} shared time slot{'s' if n != 1 else ''}"
 
 
 def _court_points(vp, cp) -> tuple[int, Optional[str]]:
     if vp and cp and vp.home_court_id and vp.home_court_id == cp.home_court_id:
         name = vp.home_court.name if vp.home_court else None
-        return 15, f"Shares your home court{f' ({name})' if name else ''}"
+        return 12, f"Shares your home court{f' ({name})' if name else ''}"
     return 0, None
 
 
 def _semantic_points(viewer: "User", cand: "User") -> tuple[int, Optional[str]]:
     """Cosine similarity of the two bios' embeddings → "similar playing style".
     The genuine-AI signal; skipped when either side has no embedding (no bio or
-    no OPENAI_API_KEY), so it only ever adds information."""
+    no OPENAI_API_KEY) or too short a bio to embed meaningfully, so it only
+    ever adds information."""
     if not viewer.bio_embedding or not cand.bio_embedding:
+        return 0, None
+    if len((viewer.bio or "").strip()) < MIN_BIO_CHARS or len((cand.bio or "").strip()) < MIN_BIO_CHARS:
         return 0, None
     try:
         sim = cosine(json.loads(viewer.bio_embedding), json.loads(cand.bio_embedding))
     except (ValueError, TypeError):
         return 0, None
-    frac = max(0.0, min(1.0, (sim - 0.45) / 0.30))  # 0.45 → 0, 0.75+ → full
-    pts = round(15 * frac)
-    return pts, ("Similar playing style" if pts >= 6 else None)
+    span = max(SEMANTIC_SIM_HI - SEMANTIC_SIM_LO, 1e-9)
+    frac = max(0.0, min(1.0, (sim - SEMANTIC_SIM_LO) / span))
+    pts = round(12 * frac)
+    return pts, ("Similar playing style" if pts >= 5 else None)
 
 
 def score_and_reason(viewer: "User", cand: "User", sport: str) -> dict:
-    """Return {score, tier, reasons, summary, distance} for a viewer ↔ candidate
-    match. `reasons` are the chips the UI shows; `summary` is a one-line fallback;
-    `distance` (miles, or None) lets callers avoid recomputing Haversine."""
+    """Return {score, tier, reasons, summary, distance, signals, score_version}
+    for a viewer ↔ candidate match. `reasons` are the chips the UI shows;
+    `summary` is a one-line fallback; `distance` (miles, or None) lets callers
+    avoid recomputing Haversine; `signals` is the per-signal point breakdown
+    (what AIMatchLog snapshots for later weight re-fits)."""
     vp = viewer.profile_for(sport)
     cp = cand.profile_for(sport)
     if not cp:
         return {"score": 0, "tier": "fair", "reasons": [],
-                "summary": f"No {sport} profile yet.", "distance": None}
+                "summary": f"No {sport} profile yet.", "distance": None,
+                "signals": {}, "score_version": SCORE_VERSION}
 
     label = rating_label(sport)
     distance = haversine_miles(viewer.lat, viewer.lng, cand.lat, cand.lng)
 
-    signals = [
-        _skill_points(vp.ntrp if vp else None, cp.ntrp, label),
-        _proximity_points(distance, viewer, cand),
-        _schedule_points(viewer, cand),
-        _court_points(vp, cp),
-        _semantic_points(viewer, cand),
-    ]
-    score = sum(pts for pts, _ in signals)
-    if viewer.primary_sport and viewer.primary_sport == cand.primary_sport:
-        score += 5
-    score = max(0, min(100, score))
+    skill = _skill_points(vp.ntrp if vp else None, cp.ntrp, label)
+    proximity = _proximity_points(distance, viewer, cand)
+    schedule = _schedule_points(viewer, cand)
+    court = _court_points(vp, cp)
+    semantic = _semantic_points(viewer, cand)
+    sport_pts = 4 if (viewer.primary_sport and viewer.primary_sport == cand.primary_sport) else 0
 
-    reasons = [chip for _, chip in signals if chip]
-    tier = "great" if score >= 70 else "good" if score >= 45 else "fair"
+    signals = {
+        "skill": skill[0],
+        "proximity": proximity[0],
+        "schedule": schedule[0],
+        "home_court": court[0],
+        "semantic": semantic[0],
+        "primary_sport": sport_pts,
+    }
+    score = max(0, min(100, sum(signals.values())))
+
+    reasons = [chip for _, chip in (skill, proximity, schedule, court, semantic) if chip]
+    tier = "great" if score >= 56 else "good" if score >= 36 else "fair"
 
     if reasons:
         summary = "; ".join(reasons)
@@ -154,7 +192,8 @@ def score_and_reason(viewer: "User", cand: "User", sport: str) -> dict:
         first = (cand.name or "").split()[0] if cand.name else "This player"
         summary = f"{first} plays {sport} at {label} {cp.ntrp} — give it a try."
 
-    return {"score": score, "tier": tier, "reasons": reasons, "summary": summary, "distance": distance}
+    return {"score": score, "tier": tier, "reasons": reasons, "summary": summary,
+            "distance": distance, "signals": signals, "score_version": SCORE_VERSION}
 
 
 def llm_reason(viewer: "User", cand: "User", sport: str, score: int) -> str:

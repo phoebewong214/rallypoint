@@ -152,12 +152,18 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 
 ### ADR-007: Explainable matching (transparent heuristic + semantic embeddings); optional LLM for wording only
 
-**Decision:** `/api/players` produces a transparent score (0-100) from real signals, each emitting a human-readable reason chip: skill closeness (0-45, dominant), court proximity by great-circle distance (0-25, continuous), weekly preferred-times grid overlap (0-20), shared home court (0-15), same primary sport (+5), and a genuine AI signal — semantic "playing style" similarity (0-15) from the cosine of two players' bio embeddings. The score is tiered (great/good/worth-a-try). The served path writes no match logs. A separate, optional `/api/ai/match-reason` endpoint can call `gpt-4o-mini` to rewrite the reason *text only* (cached in `ai_match_logs`); it never affects the score.
+**Decision:** `/api/players` produces a transparent score (0-100) from real signals, each emitting a human-readable reason chip: skill closeness (0-36, dominant), court proximity by great-circle distance (0-20, continuous), weekly preferred-times grid overlap (0-16), shared home court (0-12), a genuine AI signal — semantic "playing style" similarity (0-12) from the cosine of two players' bio embeddings — and same primary sport (+4). Weights sum to exactly 100 (`SCORE_VERSION = 2`; v1 summed to 125 and clamped, which flattened ranking at the top). The score is tiered (great ≥ 56 / good ≥ 36 / worth-a-try). The served path writes no match logs. A separate, optional `/api/ai/match-reason` endpoint can call `gpt-4o-mini` to rewrite the reason *text only* (cached in `ai_match_logs`); it never affects the score.
 **Why:**
 - Transparent + auditable: every point maps to a reason chip — no black box, and no fake "AI Match" label.
-- Real AI where it helps: the embedding signal adds genuine semantic matching and degrades gracefully to zero with no bio or API key, so it only ever adds information.
+- Real AI where it helps: the embedding signal adds genuine semantic matching and degrades gracefully to zero with no bio (or a bio under `MIN_BIO_CHARS` — near-empty bios embed to noise) or no API key, so it only ever adds information. Its cosine→points window is env-tunable (`SEMANTIC_SIM_LO`/`SEMANTIC_SIM_HI`); `python manage.py calibrate-semantic` prints the real pairwise-similarity distribution and a suggested window.
 - The served list stays fast and side-effect free; the LLM is bounded (wording only, cached).
-**Rejected:** LLM-only ranker (cost + latency + hallucinated, unauditable justifications), a fake "AI" badge over a heuristic (removed), pure trained-ML ranker (needs a labeled accept/decline history that does not exist yet — the future option once `ai_match_logs` is wired on the served path).
+**Rejected:** LLM-only ranker (cost + latency + hallucinated, unauditable justifications), a fake "AI" badge over a heuristic (removed), pure trained-ML ranker (needs a labeled accept/decline history — now being collected, see ADR-011).
+
+### ADR-011: Training data via invite-time snapshots, not hot-path logging
+
+**Decision:** When an invite is sent, `routes/invites.py` upserts an `ai_match_logs` row freezing the pair's score, per-signal point breakdown (`signals` JSON), and `score_version` — in its own transaction after the invite commits, so a snapshot failure can never break the invite. Accept / confirm-opponent / decline later stamp `outcome` + `outcome_at` on that frozen row (the label attaches to the score that was actually shown, never a recomputed one).
+**Why:** The heuristic's weights are hand-picked. Once enough labeled rows accumulate, a simple logistic regression of `outcome` on `signals` re-fits the weights from real accept/decline behavior — impossible without the breakdown, and unpriceable later (missed impressions never come back). The invite POST paths are low-frequency writes; the hot `/api/players` GET stays write-free.
+**Rejected:** logging every candidate on every GET (the write amplification ADR-007 removed), logging total score only (can't re-fit weights from a collapsed sum).
 
 ### ADR-008: Flask-Limiter on auth routes
 
@@ -165,11 +171,11 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 **Why:** Blocks naive credential brute-force without making legitimate development annoying.
 **Rejected:** No rate limit (insecure), nginx-level limit (couples app to a specific deploy).
 
-### ADR-009: Flask-Migrate initialized; production migrations still need a revision history
+### ADR-009: Migrations are the deploy path (`manage.py upgrade-db`); `init-db` demoted to dev convenience
 
-**Decision:** The app initializes Flask-Migrate, but the current deploy bootstrap still uses an idempotent `manage.py init-db` (`db.create_all`) so a free Render database can start without a paid release job. `seed.py` remains dev-only and destructive.
-**Why:** This keeps the capstone deployment simple while data is still disposable.
-**Trigger to revisit:** Before any real user data is treated as durable, create a migrations folder, generate the first revision from current models, and deploy with `flask db upgrade`/a release job instead of schema creation at web startup.
+**Decision:** Deploys run `python manage.py upgrade-db` at startup: a fresh DB gets the full Alembic chain; a DB that predates migrations (built by the old `create_all` bootstrap) is adopted once via `flask db stamp` at `LEGACY_STAMP_REVISION`, then upgraded; a migrated DB just applies pending revisions. Runs at web startup (still no paid release job needed on Render's free tier) and is idempotent. `init-db` remains for local dev; `seed.py` remains dev-only and destructive.
+**Why:** Production now holds real user data — schema changes must be versioned, reviewable, and rollback-able. `create_all` never alters existing tables, silently missing anything but new-table changes (the `_ensure_columns` patch list it required was drift codified).
+**Superseded:** startup `create_all` + hand-maintained `_ensure_columns` (kept only to heal legacy DBs at adoption time).
 
 ### ADR-010: Dark mode via CSS variable overrides
 
@@ -192,6 +198,8 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 | CSRF | Double-submit token (`rp_csrf` cookie echoed in `X-CSRF-Token`) on unsafe methods | ✅ |
 | Password storage | werkzeug `generate_password_hash` (scrypt) | ✅ |
 | CORS | Allowlist of origins from `CORS_ORIGINS` env | ✅ |
+| Dev SECRET_KEY leaking into prod | Boot refuses to start when `DATABASE_URL` is Postgres but `SECRET_KEY` is the dev default | ✅ |
+| Blind production errors | Sentry via `SENTRY_DSN` env (no-op when unset) | ✅ code-side — set the DSN in Render |
 | Rate limit storage in-memory | OK for single-instance dev | ⚠️ Use Redis in prod |
 
 ---
@@ -211,5 +219,7 @@ Short rationale for every non-obvious choice. Format: **decision → why → alt
 
 1. ~~Structured availability matching~~ **(done)** — matching now scores overlap of the real weekly `availability_slots` grid, not free-text summaries.
 2. **Real-time presence** — "online now" and new-session notifications are still static/poll-driven. Polling vs WebSocket vs SSE?
-3. **Production migrations** — replace startup `create_all` with a real Flask-Migrate revision history before durable user data.
+3. ~~Production migrations~~ **(done)** — deploys run `manage.py upgrade-db` (Alembic); legacy DBs are stamp-adopted (ADR-009).
 4. **Frontend design system** — `rally-shared.css` is effective but large; split tokens, shared components, and page styles before the next major UI expansion.
+5. **Weight re-fit** — once `ai_match_logs` accumulates enough labeled rows (ADR-011), regress outcomes on the signal breakdown and replace the hand-picked weights; bump `SCORE_VERSION`.
+6. **Semantic window calibration** — run `manage.py calibrate-semantic` against prod once enough bios have embeddings; set `SEMANTIC_SIM_LO/HI` accordingly.

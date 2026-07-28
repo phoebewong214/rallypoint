@@ -1,7 +1,11 @@
 """
 Small management CLI for deploys.
 
-    python manage.py init-db        # create any missing tables (safe to re-run)
+    python manage.py upgrade-db     # apply Alembic migrations (THE deploy path;
+                                    # adopts a legacy create_all DB by stamping)
+    python manage.py init-db        # dev-only quick bootstrap via create_all
+    python manage.py calibrate-semantic  # print bio-embedding cosine quantiles +
+                                         # suggested SEMANTIC_SIM_LO/HI env values
     python manage.py seed           # DROP everything and load sample data (dev only!)
     python manage.py seed-demo      # ADD N virtual users (non-destructive; N defaults to 40)
     python manage.py seed-demo 60   # ...with a custom count
@@ -87,6 +91,43 @@ def _bootstrap_admins():
             print(f"init-db: bootstrap-admin failed for {email!r}: {e}")
 
 
+# The migration revision whose schema equals what the old init-db/create_all
+# deploys produced. A production DB that predates migrations gets stamped here
+# once, then upgraded normally — no data touched.
+LEGACY_STAMP_REVISION = "013ddadd3602"
+
+
+def upgrade_db():
+    """Bring the schema to the latest Alembic revision (the deploy path).
+
+    Three cases, all idempotent:
+      fresh DB            → run the full migration chain
+      migrated DB         → apply any pending revisions
+      legacy create_all DB → heal drift, stamp LEGACY_STAMP_REVISION, upgrade
+    """
+    from flask_migrate import stamp as _stamp, upgrade as _upgrade
+    from sqlalchemy import inspect
+
+    app = create_app()
+    with app.app_context():
+        inspector = inspect(db.engine)
+        tables = set(inspector.get_table_names())
+        if "alembic_version" not in tables and "users" in tables:
+            _ensure_columns()  # heal any column drift the old path patched
+            # Stamp the revision matching what create_all actually built. A
+            # create_all from CURRENT models (e.g. a dev DB init-db just made)
+            # already has everything → stamp head. The production DB predates
+            # the ai_match_logs snapshot columns → stamp the legacy revision so
+            # the upgrade below applies them.
+            cols = {c["name"] for c in inspector.get_columns("ai_match_logs")}
+            adopt_at = "head" if "signals" in cols else LEGACY_STAMP_REVISION
+            _stamp(revision=adopt_at)
+            print(f"upgrade-db: adopted pre-migrations schema (stamped {adopt_at}).")
+        _upgrade()
+        _bootstrap_admins()
+        print("upgrade-db: schema is at the latest migration revision.")
+
+
 def init_db():
     app = create_app()
     with app.app_context():
@@ -94,6 +135,8 @@ def init_db():
         _ensure_columns()
         _bootstrap_admins()
         print("init-db: tables created (existing tables left untouched).")
+        print("init-db: NOTE — deploys should use `upgrade-db` (migrations); "
+              "init-db is a dev convenience only.")
 
 
 def seed():
@@ -195,6 +238,53 @@ def create_admin_cmd():
         print(f"create-admin: created admin {user.email} ({user.name}, {user.handle}).")
 
 
+def calibrate_semantic_cmd():
+    """Print the distribution of pairwise bio-embedding cosine similarities and
+    suggest SEMANTIC_SIM_LO / SEMANTIC_SIM_HI values (see services/matching.py).
+    Read-only; run it against the production DATABASE_URL for a real sample."""
+    import itertools
+    import json
+    import random
+
+    from models import User
+    from services.embeddings import cosine
+    from services.matching import SEMANTIC_SIM_LO, SEMANTIC_SIM_HI
+
+    app = create_app()
+    with app.app_context():
+        rows = User.query.filter(User.bio_embedding.isnot(None)).all()
+        vecs = []
+        for u in rows:
+            try:
+                v = json.loads(u.bio_embedding)
+                if v:
+                    vecs.append(v)
+            except (ValueError, TypeError):
+                continue
+        if len(vecs) < 2:
+            print(f"calibrate-semantic: only {len(vecs)} usable embedding(s) — "
+                  "need at least 2. Set OPENAI_API_KEY and have users save bios first.")
+            return
+        # Pairwise cosine is O(n²·dim); sample users beyond 300 to keep it quick.
+        if len(vecs) > 300:
+            vecs = random.sample(vecs, 300)
+            print(f"calibrate-semantic: sampled 300 of {len(rows)} users")
+        sims = sorted(cosine(a, b) for a, b in itertools.combinations(vecs, 2))
+
+        def q(p: float) -> float:
+            return sims[min(len(sims) - 1, int(p * len(sims)))]
+
+        print(f"users with embeddings: {len(rows)}   pairs measured: {len(sims)}")
+        print(f"cosine similarity     min {sims[0]:.3f}   p10 {q(.10):.3f}   "
+              f"p25 {q(.25):.3f}   p50 {q(.50):.3f}   p75 {q(.75):.3f}   "
+              f"p90 {q(.90):.3f}   max {sims[-1]:.3f}")
+        print(f"current window        SEMANTIC_SIM_LO={SEMANTIC_SIM_LO}  "
+              f"SEMANTIC_SIM_HI={SEMANTIC_SIM_HI}")
+        print(f"suggested window      SEMANTIC_SIM_LO={q(.50):.2f} (median)  "
+              f"SEMANTIC_SIM_HI={q(.90):.2f} (p90)")
+        print("apply by setting those env vars on the API service — no code change.")
+
+
 def build_courts_cmd():
     from import_courts import build
     build()
@@ -206,6 +296,8 @@ def import_courts_cmd():
 
 
 COMMANDS = {
+    "upgrade-db": upgrade_db,
+    "calibrate-semantic": calibrate_semantic_cmd,
     "init-db": init_db,
     "seed": seed,
     "seed-demo": seed_demo_cmd,

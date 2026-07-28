@@ -68,3 +68,19 @@ class Config:
     COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "Lax")
     COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN") or None
     AUTH_COOKIE_MAX_AGE = int(os.environ.get("AUTH_COOKIE_MAX_AGE", str(7 * 24 * 3600)))
+
+    # Optional error tracking (see app.create_app). Blank = disabled.
+    SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+
+
+# Fail-fast: a Postgres DATABASE_URL means production. Refusing to boot beats
+# silently signing JWTs with a secret that is public on GitHub (e.g. if the
+# SECRET_KEY env var is ever deleted from the host by mistake).
+if (
+    Config.SQLALCHEMY_DATABASE_URI.startswith("postgresql")
+    and Config.SECRET_KEY == "dev-secret-not-for-prod"
+):
+    raise RuntimeError(
+        "Refusing to start: DATABASE_URL points at Postgres (production) but "
+        "SECRET_KEY is unset/default. Set a strong SECRET_KEY env var."
+    )

@@ -173,3 +173,60 @@ def test_cancel_by_inviter(client):
     _, bid = _signup(client, "cx_b@rally.app")
     iid = _create(client, _h(ta), bid).get_json()["invite"]["id"]
     assert client.post(f"/api/invites/{iid}/cancel", headers=_h(ta)).status_code == 200
+
+
+# ── Training-data snapshots (AIMatchLog) ─────────────────────────────────────
+
+def _log_row(inviter_id, invitee_id, sport="Tennis"):
+    from models import AIMatchLog
+    return AIMatchLog.query.filter_by(
+        viewer_id=inviter_id, candidate_id=invitee_id, sport=sport
+    ).first()
+
+
+def test_create_invite_snapshots_match_log(client):
+    """Sending an invite freezes the heuristic's verdict for the pair: score,
+    per-signal breakdown, and the scoring version — outcome still pending."""
+    import json
+    from services.matching import SCORE_VERSION
+    ta, aid = _signup(client, "ml_a@rally.app")
+    _, bid = _signup(client, "ml_b@rally.app", ntrp="3.5")
+    assert _create(client, _h(ta), bid).status_code == 201
+
+    row = _log_row(aid, bid)
+    assert row is not None
+    assert row.score_version == SCORE_VERSION
+    assert row.outcome is None and row.outcome_at is None
+    signals = json.loads(row.signals)
+    assert set(signals) == {"skill", "proximity", "schedule", "home_court",
+                            "semantic", "primary_sport"}
+    assert sum(signals.values()) == row.score  # breakdown must reconcile
+
+
+def test_accept_labels_snapshot_accepted(client):
+    ta, aid = _signup(client, "ml_ac_a@rally.app")
+    tb, bid = _signup(client, "ml_ac_b@rally.app")
+    iid = _create(client, _h(ta), bid).get_json()["invite"]["id"]
+    frozen = _log_row(aid, bid).score
+    assert client.post(f"/api/invites/{iid}/accept-time", headers=_h(tb)).status_code == 200
+    row = _log_row(aid, bid)
+    assert row.outcome == "accepted" and row.outcome_at is not None
+    assert row.score == frozen  # label attaches to the invite-time snapshot
+
+
+def test_decline_labels_snapshot_declined(client):
+    ta, aid = _signup(client, "ml_d_a@rally.app")
+    tb, bid = _signup(client, "ml_d_b@rally.app")
+    iid = _create(client, _h(ta), bid).get_json()["invite"]["id"]
+    r = client.post(f"/api/invites/{iid}/decline", headers=_h(tb), json={"reason": "busy"})
+    assert r.status_code == 200
+    row = _log_row(aid, bid)
+    assert row.outcome == "declined" and row.outcome_at is not None
+
+
+def test_confirm_opponent_labels_accepted(client):
+    ta, aid = _signup(client, "ml_c_a@rally.app")
+    tb, bid = _signup(client, "ml_c_b@rally.app")
+    iid = _create(client, _h(ta), bid, start=_START, end=_END).get_json()["invite"]["id"]
+    assert client.post(f"/api/invites/{iid}/confirm-opponent", headers=_h(tb)).status_code == 200
+    assert _log_row(aid, bid).outcome == "accepted"

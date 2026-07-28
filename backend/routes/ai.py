@@ -13,6 +13,8 @@ LLM-upgrade path (call it per card, async, to swap the heuristic reason for an
 OpenAI one). It is rate-limited by the global limiter. If it stays unused,
 consider removing it rather than letting it rot.
 """
+import json
+
 from flask import Blueprint, jsonify, current_app
 
 from extensions import db
@@ -77,20 +79,18 @@ def match_reason():
     log = AIMatchLog.query.filter_by(
         viewer_id=viewer.id, candidate_id=cand.id, sport=data.sport
     ).first()
-    if log:
+    if log is None:
+        log = AIMatchLog(viewer_id=viewer.id, candidate_id=cand.id, sport=data.sport,
+                         score=0, reason="")
+        db.session.add(log)
+    log.reason = reason
+    log.source = source
+    # Once an outcome label exists, the score/signal snapshot is frozen training
+    # data (it must stay what the invite flow recorded) — only refresh it while
+    # the row is still unlabeled.
+    if log.outcome is None:
         log.score = score
-        log.reason = reason
-        log.source = source
-    else:
-        db.session.add(
-            AIMatchLog(
-                viewer_id=viewer.id,
-                candidate_id=cand.id,
-                sport=data.sport,
-                score=score,
-                reason=reason,
-                source=source,
-            )
-        )
+        log.signals = json.dumps(m["signals"])
+        log.score_version = m["score_version"]
     db.session.commit()
     return jsonify({"score": score, "reason": reason, "source": source})

@@ -12,14 +12,14 @@ services:
     plan: free          # NOTE: free web services sleep after inactivity (first request is slow).
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    # init-db runs at startup (idempotent create_all) so the schema exists on a
-    # fresh DB without needing Shell/Jobs (paid-only on Render's free tier).
-    # import-courts --if-empty seeds the real Chicago courts on a fresh DB and is
-    # a near-instant no-op once populated. Both run at runtime where DATABASE_URL
-    # is reachable, and both are idempotent.
-    # import wrapped in (… || echo) so a seeding error can never block gunicorn
-    # from starting (the app boots even if the import step fails).
-    startCommand: python manage.py init-db && (python manage.py import-courts --if-empty || echo "import-courts failed, continuing") && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    # upgrade-db runs Alembic migrations at startup (no Shell/Jobs needed on the
+    # free tier). It is idempotent: a fresh DB gets the full chain, an existing
+    # pre-migrations DB is adopted via a one-time stamp, and a migrated DB just
+    # applies anything pending. import-courts --if-empty seeds the real Chicago
+    # courts on a fresh DB and is a near-instant no-op once populated. The
+    # import is wrapped in (… || echo) so a seeding error can never block
+    # gunicorn from starting.
+    startCommand: python manage.py upgrade-db && (python manage.py import-courts --if-empty || echo "import-courts failed, continuing") && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/health
     envVars:
       - key: SECRET_KEY
@@ -56,4 +56,6 @@ services:
       - key: BOOTSTRAP_ADMIN_EMAIL # optional — email(s) auto-promoted to admin on deploy (comma-separated); grants the first admin without a shell
         sync: false
       - key: OPENAI_API_KEY        # optional — enables AI match reasons + AI support replies; blank = heuristic/escalation only
+        sync: false
+      - key: SENTRY_DSN            # optional — error tracking; blank = disabled (sentry.io → project → DSN)
         sync: false
