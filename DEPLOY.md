@@ -55,12 +55,17 @@ push.
      gracefully (the embedding signal is simply skipped, scores still work).
    - **Optional:** `BOOTSTRAP_ADMIN_EMAIL = you@yourdomain.com` — grants the first
      admin account (for the admin dashboard) on signup, without needing a shell.
-   (`SECRET_KEY` and `DATABASE_URL` are set automatically.)
-3. **Tables + courts:** the Procfile release step runs `manage.py init-db` and
-   imports the Chicago courts automatically on deploy. If you ever need to do it
-   by hand, Render → your service → **Shell** tab → run:
+   - **Optional:** `SENTRY_DSN = https://...@....ingest.sentry.io/...` — enables
+     error tracking (sentry.io → create a Flask project → copy its DSN). Leave
+     blank to disable.
+   (`SECRET_KEY` and `DATABASE_URL` are set automatically. The app refuses to
+   boot against Postgres if `SECRET_KEY` is ever missing — that's deliberate.)
+3. **Schema + courts:** the start command runs `manage.py upgrade-db` (Alembic
+   migrations; a pre-migrations database is adopted automatically on first run)
+   and imports the Chicago courts on deploy. If you ever need to do it by hand,
+   Render → your service → **Shell** tab → run:
    ```
-   python manage.py init-db
+   python manage.py upgrade-db
    python manage.py import-courts --if-empty
    ```
 4. Confirm it's up: open `https://<your-render-url>/api/health` → `{"status":"ok"}`.

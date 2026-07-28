@@ -8,6 +8,8 @@ Run:
     python seed.py            # create DB + seed sample data
     python app.py             # → http://localhost:5050
 """
+import os
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flasgger import Swagger
@@ -54,9 +56,26 @@ SWAGGER_CONFIG = {
 }
 
 
+def _init_sentry(dsn: str) -> None:
+    """Error tracking — a no-op unless SENTRY_DSN is set (dev/tests stay clean).
+    The SDK auto-instruments Flask/SQLAlchemy; unhandled exceptions and 500s
+    are reported with request context (no PII beyond what we opt into)."""
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=dsn,
+        send_default_pii=False,
+        # 10% performance tracing — enough for latency trends on the free plan.
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+    )
+
+
 def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    if app.config.get("SENTRY_DSN"):
+        _init_sentry(app.config["SENTRY_DSN"])
 
     db.init_app(app)
     migrate.init_app(app, db)

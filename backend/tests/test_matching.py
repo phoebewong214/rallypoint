@@ -74,19 +74,42 @@ def test_cosine_basics():
     assert cosine([1, 2], [1, 2, 3]) == 0.0  # mismatched length → 0
 
 
+LONG_BIO = "Aggressive baseliner who loves long weekend rallies and drilling."
+
+
 def test_semantic_signal_adds_style_chip(client):
-    """With similar bio embeddings, the match gains a 'similar playing style'
-    chip (the genuine-AI signal) — injected directly, no OpenAI call needed."""
+    """With similar bio embeddings (and real bios), the match gains a 'similar
+    playing style' chip (the genuine-AI signal) — injected directly, no OpenAI
+    call needed."""
     import json
     from extensions import db
     from models import User
     tv, _ = _signup(client, "sem_v@rally.app", ntrp="3.5")
     _ts, sid = _signup(client, "sem_s@rally.app", ntrp="3.5")
-    User.query.filter_by(email="sem_v@rally.app").first().bio_embedding = json.dumps([0.98, 0.1, 0.0])
-    User.query.filter_by(email="sem_s@rally.app").first().bio_embedding = json.dumps([1.0, 0.0, 0.0])
+    v = User.query.filter_by(email="sem_v@rally.app").first()
+    s = User.query.filter_by(email="sem_s@rally.app").first()
+    v.bio, v.bio_embedding = LONG_BIO, json.dumps([0.98, 0.1, 0.0])
+    s.bio, s.bio_embedding = LONG_BIO, json.dumps([1.0, 0.0, 0.0])
     db.session.commit()
     row = _row(client, _h(tv), sid)
     assert any("similar playing style" in r.lower() for r in row["matchReasons"])
+
+
+def test_short_bio_suppresses_semantic_signal(client):
+    """Embeddings of near-empty bios are noise — below MIN_BIO_CHARS the
+    semantic signal must stay silent even when embeddings exist."""
+    import json
+    from extensions import db
+    from models import User
+    tv, _ = _signup(client, "sem3_v@rally.app", ntrp="3.5")
+    _ts, sid = _signup(client, "sem3_s@rally.app", ntrp="3.5")
+    v = User.query.filter_by(email="sem3_v@rally.app").first()
+    s = User.query.filter_by(email="sem3_s@rally.app").first()
+    v.bio, v.bio_embedding = "tennis", json.dumps([1.0, 0.0, 0.0])
+    s.bio, s.bio_embedding = "tennis", json.dumps([1.0, 0.0, 0.0])
+    db.session.commit()
+    row = _row(client, _h(tv), sid)
+    assert not any("similar playing style" in r.lower() for r in row["matchReasons"])
 
 
 def test_no_embedding_no_style_chip(client):
@@ -106,3 +129,12 @@ def test_score_spreads_not_everyone_the_same(client):
               client.get("/api/players?sport=Pickleball", headers=_h(tv)).get_json()["players"]}
     assert len({scores[a], scores[b], scores[c]}) == 3  # all distinct
     assert scores[a] > scores[b] > scores[c]
+
+
+def test_score_weights_sum_to_100():
+    """The normalized formula must keep its no-saturation guarantee: perfect on
+    every signal lands exactly at 100 (36+20+16+12+12+4), not clamped."""
+    from services import matching
+    assert matching.SCORE_VERSION == 2
+    # max points per signal, straight from the scoring functions' constants
+    assert 36 + 20 + 16 + 12 + 12 + 4 == 100

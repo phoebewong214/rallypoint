@@ -15,17 +15,21 @@ specific time until one side accepts.
   POST /api/invites/<id>/cancel            either party calls it off
   GET  /api/invites                        the viewer's open invites (read path)
 """
+import json
+from datetime import datetime
+
 from flask import Blueprint, current_app, jsonify
 from sqlalchemy import or_
 
 from extensions import db
-from models import GameInvite, Session, SessionStatus, User, Court
+from models import AIMatchLog, GameInvite, Session, SessionStatus, User, Court
 from models.game_invite import (
     TimeProposal, PHASE_AWAITING, PHASE_SETTLING, PHASE_CONFIRMED,
     PHASE_DECLINED, PHASE_CANCELLED, OPEN_PHASES,
 )
 from schemas.invites import CreateInviteSchema, ProposeTimeSchema, DeclineInviteSchema
 from services.email import send_email
+from services.matching import score_and_reason
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -51,6 +55,56 @@ def _fmt(dt) -> str:
 def _other_party(inv: GameInvite, viewer_id: int) -> User:
     """The participant who ISN'T the actor — i.e. who to notify."""
     return inv.invitee if viewer_id == inv.inviter_id else inv.inviter
+
+
+def _upsert_match_log(inviter: User, invitee: User, sport: str) -> "AIMatchLog":
+    """Get-or-create the (inviter→invitee, sport) match-log row and refresh its
+    score/signal snapshot from the current heuristic. Caller commits."""
+    m = score_and_reason(inviter, invitee, sport)
+    row = AIMatchLog.query.filter_by(
+        viewer_id=inviter.id, candidate_id=invitee.id, sport=sport
+    ).first()
+    if row is None:
+        row = AIMatchLog(viewer_id=inviter.id, candidate_id=invitee.id, sport=sport,
+                         score=0, reason="")
+        db.session.add(row)
+    row.score = m["score"]
+    row.reason = m["summary"]
+    row.source = "heuristic"
+    row.signals = json.dumps(m["signals"])
+    row.score_version = m["score_version"]
+    return row
+
+
+def _snapshot_match(inviter: User, invitee: User, sport: str) -> None:
+    """Record what the matcher claimed at the moment an invite was sent — the
+    training-data write. Runs in its own transaction AFTER the invite commit;
+    a snapshot failure must never break the invite."""
+    try:
+        _upsert_match_log(inviter, invitee, sport)
+        db.session.commit()
+    except Exception:  # noqa: BLE001 — analytics writes never break the flow
+        db.session.rollback()
+
+
+def _record_outcome(inv: GameInvite, outcome: str) -> None:
+    """Label the invite's match-log row ("accepted" / "declined"). If the invite
+    predates snapshotting, backfill a snapshot at current state — a late label
+    beats no label. Last decision wins (a decline after a confirm overwrites)."""
+    try:
+        row = AIMatchLog.query.filter_by(
+            viewer_id=inv.inviter_id, candidate_id=inv.invitee_id, sport=inv.sport
+        ).first()
+        if row is None:
+            # Invite predates snapshotting — backfill at current state. When a
+            # snapshot exists we deliberately do NOT refresh it: the label must
+            # attach to the score that was live when the invite went out.
+            row = _upsert_match_log(inv.inviter, inv.invitee, inv.sport)
+        row.outcome = outcome
+        row.outcome_at = datetime.utcnow()
+        db.session.commit()
+    except Exception:  # noqa: BLE001 — analytics writes never break the flow
+        db.session.rollback()
 
 
 def _notify(user: User, subject: str, body: str) -> None:
@@ -90,7 +144,8 @@ def create_invite():
     data = parse_json(CreateInviteSchema)
     if data.inviteeId == viewer.id:
         return jsonify({"error": "You can't invite yourself"}), 400
-    if not User.query.get(data.inviteeId):
+    invitee = User.query.get(data.inviteeId)
+    if not invitee:
         return jsonify({"error": "That player no longer exists"}), 404
 
     # Idempotency: don't stack duplicate open invites between the same pair for
@@ -126,6 +181,9 @@ def create_invite():
         start_at=data.startAt, end_at=data.endAt,
     ))
     db.session.commit()
+    # Training-data write: freeze the score/signals the matcher showed for this
+    # pair at send time; accept/decline later labels this row.
+    _snapshot_match(viewer, invitee, data.sport)
     _notify(
         inv.invitee,
         f"{viewer.name} invited you to play {data.sport}",
@@ -148,6 +206,7 @@ def confirm_opponent(invite_id: int):
         return jsonify({"error": "This invite isn't awaiting confirmation"}), 409
     inv.phase = PHASE_SETTLING
     db.session.commit()
+    _record_outcome(inv, "accepted")  # invitee agreed to play — positive label
     _notify(
         inv.inviter,
         f"{viewer.name} is in — now settle a time",
@@ -220,6 +279,7 @@ def accept_time(invite_id: int):
     inv.phase = PHASE_CONFIRMED
     inv.session_id = s.id
     db.session.commit()
+    _record_outcome(inv, "accepted")  # game confirmed — strongest positive label
     _notify(
         _other_party(inv, viewer.id),
         f"Game on 🎾 — {viewer.name} accepted {_fmt(proposal.start_at)}",
@@ -244,6 +304,7 @@ def decline_invite(invite_id: int):
     inv.phase = PHASE_DECLINED
     inv.decline_reason = data.reason
     db.session.commit()
+    _record_outcome(inv, "declined")  # negative label for the snapshot
     _notify(
         inv.inviter,
         f"{viewer.name} declined your invite",
