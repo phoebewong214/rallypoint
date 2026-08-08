@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { WakeBanner } from "./components/WakeBanner";
 import { SupportWidget } from "./components/SupportWidget";
+import { useInviteStream } from "./hooks/useInviteStream";
 
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -20,6 +21,15 @@ const CourtsPage = React.lazy(() => import("./pages/CourtsPage"));
 const CourtDetailPage = React.lazy(() => import("./pages/CourtDetailPage"));
 // Admin-only — keep its bundle out of every other user's download.
 const AdminPage = React.lazy(() => import("./pages/AdminPage"));
+
+/* One app-wide SSE subscription for real-time invite updates while signed in.
+   Renders nothing; must sit under AuthProvider (and the QueryClientProvider
+   from main.tsx). */
+const RealtimeInvites: React.FC = () => {
+  const { isAuthenticated } = useAuth();
+  useInviteStream(isAuthenticated);
+  return null;
+};
 
 /* Redirect logged-in users away from the login page. */
 const PublicOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -43,6 +53,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <RealtimeInvites />
         <WakeBanner />
         <SupportWidget />
         <Routes>

@@ -30,6 +30,7 @@ from models.game_invite import (
 from schemas.invites import CreateInviteSchema, ProposeTimeSchema, DeclineInviteSchema
 from services.email import send_email
 from services.matching import score_and_reason
+from services.stream import broker
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -107,6 +108,17 @@ def _record_outcome(inv: GameInvite, outcome: str) -> None:
         db.session.rollback()
 
 
+def _publish_invites(inv: GameInvite) -> None:
+    """Nudge both parties' open SSE streams (see routes/stream.py) so their My
+    Games views refetch. Call only after a successful commit; a push failure
+    must never break the write it announces."""
+    try:
+        for uid in (inv.inviter_id, inv.invitee_id):
+            broker.publish(uid, {"type": "invites"})
+    except Exception:  # noqa: BLE001 — push is best-effort, like email
+        pass
+
+
 def _notify(user: User, subject: str, body: str) -> None:
     """Best-effort 'your turn' email — a mail failure must never break the
     request, so everything is swallowed (send_email is already non-raising, but
@@ -181,6 +193,7 @@ def create_invite():
         start_at=data.startAt, end_at=data.endAt,
     ))
     db.session.commit()
+    _publish_invites(inv)
     # Training-data write: freeze the score/signals the matcher showed for this
     # pair at send time; accept/decline later labels this row.
     _snapshot_match(viewer, invitee, data.sport)
@@ -206,6 +219,7 @@ def confirm_opponent(invite_id: int):
         return jsonify({"error": "This invite isn't awaiting confirmation"}), 409
     inv.phase = PHASE_SETTLING
     db.session.commit()
+    _publish_invites(inv)
     _record_outcome(inv, "accepted")  # invitee agreed to play — positive label
     _notify(
         inv.inviter,
@@ -238,6 +252,7 @@ def propose_time(invite_id: int):
         start_at=data.startAt, end_at=data.endAt,
     ))
     db.session.commit()
+    _publish_invites(inv)
     _notify(
         _other_party(inv, viewer.id),
         f"{viewer.name} proposed a time",
@@ -279,6 +294,7 @@ def accept_time(invite_id: int):
     inv.phase = PHASE_CONFIRMED
     inv.session_id = s.id
     db.session.commit()
+    _publish_invites(inv)
     _record_outcome(inv, "accepted")  # game confirmed — strongest positive label
     _notify(
         _other_party(inv, viewer.id),
@@ -304,6 +320,7 @@ def decline_invite(invite_id: int):
     inv.phase = PHASE_DECLINED
     inv.decline_reason = data.reason
     db.session.commit()
+    _publish_invites(inv)
     _record_outcome(inv, "declined")  # negative label for the snapshot
     _notify(
         inv.inviter,
@@ -327,6 +344,7 @@ def cancel_invite(invite_id: int):
         return jsonify({"error": "This invite is no longer open"}), 409
     inv.phase = PHASE_CANCELLED
     db.session.commit()
+    _publish_invites(inv)
     _notify(
         _other_party(inv, viewer.id),
         f"{viewer.name} called off the game",

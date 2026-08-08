@@ -7,6 +7,7 @@ from .appointments import appointments_bp
 from .invites import invites_bp
 from .admin import admin_bp
 from .support import support_bp
+from .stream import stream_bp
 
 
 def register_blueprints(app):
@@ -19,3 +20,4 @@ def register_blueprints(app):
     app.register_blueprint(invites_bp, url_prefix="/api/invites")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(support_bp, url_prefix="/api/support")
+    app.register_blueprint(stream_bp, url_prefix="/api/stream")

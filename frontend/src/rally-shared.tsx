@@ -7,6 +7,8 @@ import type { IconName, NavId } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
 import { useSessions } from "./hooks/useSessions";
+import { useInvites } from "./hooks/useInvites";
+import { actionNeededCount } from "./lib/actionNeeded";
 import { playerPhotoUrl } from "./api/client";
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke"> & {
@@ -178,10 +180,13 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
   const location = useLocation();
   const showUser = !hideUser && !!user;
 
-  // Incoming game requests waiting on a reply — surfaced as a badge on "My Games"
-  // so they're noticed from any page (shares the cached /sessions query).
+  // Whatever's waiting on the viewer — open invites on their turn + legacy
+  // session requests — surfaced as a badge on "My Games" so it's noticed from
+  // any page (shares the cached /sessions + /invites queries, which the SSE
+  // stream keeps fresh).
   const { data: sessionsData } = useSessions(!!user);
-  const requestCount = (sessionsData?.sessions ?? []).filter((s) => s.bucket === "requests").length;
+  const { data: invitesData } = useInvites(!!user);
+  const requestCount = actionNeededCount(sessionsData?.sessions, invitesData?.invites);
 
   // Admins get an extra "Admin" entry; everyone else sees the standard links.
   const navLinks: NavLinkDef[] = user?.isAdmin

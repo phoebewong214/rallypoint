@@ -113,4 +113,8 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    # threaded=True (Flask's default, made explicit): /api/stream holds a
+    # connection open per client, so the dev server needs a thread per stream
+    # alongside normal requests. Production uses gunicorn -k gevent instead
+    # (see wsgi_gevent.py / render.yaml).
+    app.run(debug=True, port=5050, threaded=True)

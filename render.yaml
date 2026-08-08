@@ -19,7 +19,13 @@ services:
     # courts on a fresh DB and is a near-instant no-op once populated. The
     # import is wrapped in (… || echo) so a seeding error can never block
     # gunicorn from starting.
-    startCommand: python manage.py upgrade-db && (python manage.py import-courts --if-empty || echo "import-courts failed, continuing") && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    # gevent worker (via wsgi_gevent, which monkey-patches before app import):
+    # SSE streams (/api/stream) hold a connection open per client, which would
+    # permanently occupy a sync worker each — greenlets multiplex them all on
+    # one worker instead. Keep --workers 1: the invite push broker is
+    # in-process, so a second worker's subscribers would miss events published
+    # from the first.
+    startCommand: python manage.py upgrade-db && (python manage.py import-courts --if-empty || echo "import-courts failed, continuing") && gunicorn wsgi_gevent:app --bind 0.0.0.0:$PORT -k gevent --workers 1 --timeout 60
     healthCheckPath: /api/health
     envVars:
       - key: SECRET_KEY
