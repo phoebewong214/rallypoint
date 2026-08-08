@@ -8,7 +8,7 @@ logins) is in the [root README](../README.md); architecture decisions are in
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt         # Apple Silicon + Python 3.13+: see the psycopg2 note under Tests
 cp .env.example .env
 python seed.py     # create DB + sample users
 python app.py      # → http://localhost:5050
@@ -39,6 +39,14 @@ gunicorn wsgi_gevent:app --bind 0.0.0.0:5050 -k gevent --workers 1
   (OpenAI, SMTP/Resend, photo upload) cooperate with the event loop. psycopg2
   is a C driver gevent can't patch; short queries block the loop briefly,
   which is acceptable at this app's sizes.
+- `subscribe()` caps concurrent streams per user (`MAX_STREAMS_PER_USER`) and
+  evicts the oldest past the cap — the endpoint is rate-limit-exempt, so this is
+  what stops one account from opening unbounded connections on the single
+  worker.
+- Dev only: the browser holds one long-lived HTTP/1.1 connection per open tab
+  for the stream, counting against its ~6-per-host cap; many tabs on
+  `localhost` can crowd out other requests. Production is served over HTTP/2
+  (multiplexed), where this doesn't apply.
 
 ## Tests
 
@@ -49,4 +57,6 @@ pytest          # in-memory SQLite; no Postgres needed
 Note for Apple Silicon + newer Pythons (e.g. 3.14): `psycopg2-binary` may lack
 a wheel and fail to build locally. Tests don't need it — install everything
 else with `grep -v psycopg2-binary requirements.txt | pip install -r /dev/stdin`.
-Production (Render, Python 3.12 per `runtime.txt`) installs it from a wheel.
+Production installs it from a wheel on the Python `runtime.txt` requests
+(3.12.6); set `PYTHON_VERSION` in the Render dashboard if that runtime file is
+ever not honored.

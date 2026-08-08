@@ -8,7 +8,7 @@ import json
 import queue
 from datetime import datetime, timedelta
 
-from services.stream import broker
+from services.stream import broker, CLOSE, MAX_STREAMS_PER_USER
 
 # Future-relative times so the "must be in the future" validation keeps passing.
 _base = (datetime.utcnow() + timedelta(days=60)).replace(hour=18, minute=0, second=0, microsecond=0)
@@ -68,6 +68,34 @@ def test_stream_connects_delivers_heartbeats_and_cleans_up(client, app):
 
     rsp.close()  # client disconnects → subscription must be reaped
     assert broker.subscriber_count(uid) == 0
+
+
+def test_head_request_does_not_leak_a_subscription(client):
+    # Flask auto-registers HEAD for GET routes; a HEAD response body is never
+    # iterated, so the stream generator must never subscribe for it (else the
+    # queue leaks — there's no iteration to reach the unsubscribing finally).
+    t, uid = _signup(client, "head@rally.app")
+    assert broker.subscriber_count(uid) == 0
+    for _ in range(5):
+        rsp = client.open("/api/stream", method="HEAD", headers=_h(t))
+        assert rsp.status_code == 200
+        rsp.close()
+    assert broker.subscriber_count(uid) == 0
+
+
+def test_per_user_stream_cap_evicts_the_oldest(client):
+    t, uid = _signup(client, "cap@rally.app")
+    qs = [broker.subscribe(uid) for _ in range(MAX_STREAMS_PER_USER + 2)]
+    try:
+        # Never more than the cap held at once, no matter how many connect.
+        assert broker.subscriber_count(uid) == MAX_STREAMS_PER_USER
+        # The two oldest were evicted and woken with CLOSE so their generators
+        # break out and unsubscribe.
+        assert qs[0].get_nowait() is CLOSE
+        assert qs[1].get_nowait() is CLOSE
+    finally:
+        for q in qs:
+            broker.unsubscribe(uid, q)
 
 
 def test_happy_path_transitions_push_to_both_parties(client):

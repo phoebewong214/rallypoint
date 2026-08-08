@@ -15,8 +15,9 @@ const RECONNECT_MS = 30_000;
     Degradation ladder: EventSource retries transient drops natively; while the
     stream is down we poll the same invalidation every 30s; when the browser
     abandons the connection entirely (e.g. the server answered an error during
-    a cold start) we re-create it every 30s. On any reconnect we invalidate
-    once to catch whatever happened while offline. */
+    a cold start) we re-create it every 30s. Every successful connect
+    invalidates once, so a fresh login (or a reconnect after an outage) syncs
+    to the current account's data instead of showing whatever the cache held. */
 export function useInviteStream(enabled: boolean) {
   const qc = useQueryClient();
 
@@ -26,7 +27,6 @@ export function useInviteStream(enabled: boolean) {
     let es: EventSource | null = null;
     let pollTimer: number | null = null;
     let reconnectTimer: number | null = null;
-    let everConnected = false;
     let disposed = false;
 
     const invalidate = () => {
@@ -48,8 +48,11 @@ export function useInviteStream(enabled: boolean) {
       es = new EventSource(STREAM_URL, { withCredentials: true });
       es.onopen = () => {
         stopPolling();
-        if (everConnected) invalidate(); // catch up after an outage
-        everConnected = true;
+        // Sync on every successful connect: this covers a plain reconnect after
+        // an outage AND the first connect of a session (e.g. right after a
+        // login), where the query cache may still hold the previous account's
+        // — or simply stale — invites/sessions until something refetches.
+        invalidate();
       };
       es.onmessage = (ev) => {
         try {
