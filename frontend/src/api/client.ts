@@ -24,6 +24,10 @@ const API_BASE = resolveApiBase();
 export const playerPhotoUrl = (id: number | string, version?: number | null) =>
   version ? `${API_BASE}/players/${id}/photo?v=${version}` : null;
 
+/** SSE push channel (see useInviteStream). EventSource can't go through the
+    fetch wrapper; withCredentials makes it send the same auth cookie. */
+export const STREAM_URL = `${API_BASE}/stream`;
+
 const CSRF_COOKIE = "rp_csrf";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 

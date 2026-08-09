@@ -72,6 +72,10 @@ class Config:
     # Optional error tracking (see app.create_app). Blank = disabled.
     SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
+    # SSE keepalive cadence (GET /api/stream). 15s is short enough to survive
+    # typical proxy idle timeouts (~30-60s); tests override it to keep fast.
+    STREAM_HEARTBEAT_SECONDS = float(os.environ.get("STREAM_HEARTBEAT_SECONDS", "15"))
+
 
 # Fail-fast: a Postgres DATABASE_URL means production. Refusing to boot beats
 # silently signing JWTs with a secret that is public on GitHub (e.g. if the
