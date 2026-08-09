@@ -57,6 +57,7 @@ pytest          # in-memory SQLite; no Postgres needed
 Note for Apple Silicon + newer Pythons (e.g. 3.14): `psycopg2-binary` may lack
 a wheel and fail to build locally. Tests don't need it — install everything
 else with `grep -v psycopg2-binary requirements.txt | pip install -r /dev/stdin`.
-Production installs it from a wheel on the Python `runtime.txt` requests
-(3.12.6); set `PYTHON_VERSION` in the Render dashboard if that runtime file is
-ever not honored.
+Production installs it from a wheel on the Python `.python-version` requests
+(3.12 — Render resolves it to the latest patch release); set `PYTHON_VERSION`
+in the Render dashboard if that file is ever not honored. (`runtime.txt` is a
+Heroku convention Render ignores — don't reintroduce it.)
