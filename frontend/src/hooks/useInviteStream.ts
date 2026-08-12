@@ -7,9 +7,10 @@ import { STREAM_URL } from "../api/client";
 const POLL_MS = 30_000;
 const RECONNECT_MS = 30_000;
 
-/** Real-time invite updates. Subscribes to the backend SSE channel
+/** Real-time invite + chat updates. Subscribes to the backend SSE channel
     (GET /api/stream, cookie auth) and, on every `invites` event, invalidates
-    the ['invites'] and ['sessions'] queries — data flows through the normal
+    the ['invites'] and ['sessions'] queries; a `chat` event invalidates just
+    that game's ['chat', inviteId] thread — data flows through the normal
     query path, the stream only says "refetch now".
 
     Degradation ladder: EventSource retries transient drops natively; while the
@@ -29,9 +30,16 @@ export function useInviteStream(enabled: boolean) {
     let reconnectTimer: number | null = null;
     let disposed = false;
 
-    const invalidate = () => {
+    const invalidateInvites = () => {
       qc.invalidateQueries({ queryKey: ["invites"] });
       qc.invalidateQueries({ queryKey: ["sessions"] });
+    };
+    /* The catch-up sweep (poll fallback + every successful connect): everything
+       the stream would have nudged, including any open chat thread — the
+       ['chat'] prefix matches all ['chat', inviteId] queries. */
+    const invalidate = () => {
+      invalidateInvites();
+      qc.invalidateQueries({ queryKey: ["chat"] });
     };
     const stopPolling = () => {
       if (pollTimer !== null) {
@@ -56,7 +64,12 @@ export function useInviteStream(enabled: boolean) {
       };
       es.onmessage = (ev) => {
         try {
-          if (JSON.parse(ev.data)?.type === "invites") invalidate();
+          const msg = JSON.parse(ev.data);
+          if (msg?.type === "invites") {
+            invalidateInvites();
+          } else if (msg?.type === "chat" && typeof msg.inviteId === "number") {
+            qc.invalidateQueries({ queryKey: ["chat", msg.inviteId] });
+          }
         } catch {
           /* ignore malformed frames */
         }

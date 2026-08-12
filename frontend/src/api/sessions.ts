@@ -18,6 +18,9 @@ export interface ApiSession {
   weekday: string | null;
   time: string | null;
   note: string | null;
+  // Set when this session was materialized from a game invite — the id of that
+  // invite, which keys the game's chat thread. Null for legacy sessions.
+  inviteId?: number | null;
   next?: boolean;
 }
 

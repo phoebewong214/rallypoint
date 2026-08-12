@@ -44,3 +44,19 @@ class ProposeTimeSchema(_TimeFields):
 
 class DeclineInviteSchema(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=200)
+
+
+class CreateMessageSchema(BaseModel):
+    # Length bounds apply to the STRIPPED body: an all-whitespace message is
+    # empty (422), and trailing padding can't smuggle past the 1000-char cap.
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def _strip_and_bound(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("message can't be empty")
+        if len(v) > 1000:
+            raise ValueError("message is too long (1000 characters max)")
+        return v

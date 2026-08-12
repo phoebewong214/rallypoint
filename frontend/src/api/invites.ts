@@ -34,6 +34,32 @@ export interface ProposeTimeBody {
   endAt?: string | null; // ISO — counter with a window (usually a specific time)
 }
 
+/* Per-game chat. Threads are keyed by INVITE id (stable for the game's whole
+   life, even when the materialized session is cancelled); confirmed session
+   rows carry `inviteId` so the card can open its thread. `mine` is
+   viewer-relative, like `sentByMe` on sessions. */
+export interface ApiChatMessage {
+  id: number;
+  inviteId: number;
+  senderId: number;
+  senderName: string | null;
+  mine: boolean;
+  body: string;
+  createdAt: string; // ISO, UTC
+}
+
+export const chatApi = {
+  list: (inviteId: number, after?: number) =>
+    api<{ messages: ApiChatMessage[] }>(
+      `/invites/${inviteId}/messages${after != null ? `?after=${after}` : ""}`,
+    ),
+  send: (inviteId: number, body: string) =>
+    api<{ message: ApiChatMessage }>(`/invites/${inviteId}/messages`, {
+      method: "POST",
+      body: { body },
+    }),
+};
+
 export const invitesApi = {
   list: () => api<{ invites: ApiInvite[] }>("/invites"),
   create: (body: CreateInviteBody) =>
