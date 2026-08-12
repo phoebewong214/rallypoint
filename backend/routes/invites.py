@@ -14,20 +14,27 @@ specific time until one side accepts.
   POST /api/invites/<id>/decline           invitee declines
   POST /api/invites/<id>/cancel            either party calls it off
   GET  /api/invites                        the viewer's open invites (read path)
+  GET  /api/invites/<id>/messages          the game's chat thread (participants only)
+  POST /api/invites/<id>/messages          send a chat message (confirmed games only)
 """
+import hashlib
 import json
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
+from flask_limiter.util import get_remote_address
 from sqlalchemy import or_
 
-from extensions import db
-from models import AIMatchLog, GameInvite, Session, SessionStatus, User, Court
+from extensions import db, limiter
+from models import AIMatchLog, GameInvite, Message, Session, SessionStatus, User, Court
 from models.game_invite import (
     TimeProposal, PHASE_AWAITING, PHASE_SETTLING, PHASE_CONFIRMED,
     PHASE_DECLINED, PHASE_CANCELLED, OPEN_PHASES,
 )
-from schemas.invites import CreateInviteSchema, ProposeTimeSchema, DeclineInviteSchema
+from schemas.invites import (
+    CreateInviteSchema, CreateMessageSchema, DeclineInviteSchema, ProposeTimeSchema,
+)
+from services.auth import extract_bearer
 from services.email import send_email
 from services.matching import score_and_reason
 from services.stream import broker
@@ -115,6 +122,18 @@ def _publish_invites(inv: GameInvite) -> None:
     try:
         for uid in (inv.inviter_id, inv.invitee_id):
             broker.publish(uid, {"type": "invites"})
+    except Exception:  # noqa: BLE001 — push is best-effort, like email
+        pass
+
+
+def _publish_chat(inv: GameInvite) -> None:
+    """Nudge both parties that this game's chat thread changed. Like the invite
+    nudge it carries no message content — clients refetch the thread through the
+    authenticated read path — but it does name the thread (inviteId) so an open
+    panel only refetches its own conversation."""
+    try:
+        for uid in (inv.inviter_id, inv.invitee_id):
+            broker.publish(uid, {"type": "chat", "inviteId": inv.id})
     except Exception:  # noqa: BLE001 — push is best-effort, like email
         pass
 
@@ -352,3 +371,69 @@ def cancel_invite(invite_id: int):
         "No worries — find another partner any time.",
     )
     return jsonify({"invite": inv.to_dict(viewer.id)})
+
+
+# ---- per-game chat --------------------------------------------------------
+
+# No-`after` reads return at most this many of the LATEST messages (still in
+# ascending order) so a long-running thread can't grow the response unboundedly.
+CHAT_PAGE_LIMIT = 200
+
+
+def _get_participant_invite_or_404(invite_id: int, viewer: User):
+    """The invite, but ONLY for its two participants. A non-participant gets the
+    same 404 as a nonexistent id — the chat endpoints never confirm that an
+    invite (or a conversation) exists to anyone outside it."""
+    inv = GameInvite.query.get(invite_id)
+    if inv is None or viewer.id not in (inv.inviter_id, inv.invitee_id):
+        return None, (jsonify({"error": "Invite not found"}), 404)
+    return inv, None
+
+
+def _chat_send_key() -> str:
+    """Per-account throttle key for sending messages: the auth credential
+    (cookie or Bearer) hashes to a stable per-session bucket, so one chatty
+    user can't consume an office/NAT IP's whole allowance. Falls back to IP
+    when unauthenticated (those requests all 401 anyway)."""
+    token = extract_bearer(request.headers.get("Authorization")) \
+        or request.cookies.get(current_app.config["AUTH_COOKIE_NAME"])
+    if token:
+        return "chat:" + hashlib.sha256(token.encode()).hexdigest()[:32]
+    return get_remote_address()
+
+
+@invites_bp.get("/<int:invite_id>/messages")
+@require_auth
+def list_messages(invite_id: int):
+    viewer = current_user()
+    inv, err = _get_participant_invite_or_404(invite_id, viewer)
+    if err:
+        return err
+    # Any phase is readable: a declined/cancelled game keeps its history.
+    after = request.args.get("after", type=int)
+    q = Message.query.filter(Message.invite_id == inv.id)
+    if after is not None:
+        rows = q.filter(Message.id > after).order_by(Message.id.asc()).all()
+    else:
+        # Latest CHAT_PAGE_LIMIT, presented oldest-first like the panel renders.
+        rows = q.order_by(Message.id.desc()).limit(CHAT_PAGE_LIMIT).all()
+        rows.reverse()
+    return jsonify({"messages": [m.to_dict(viewer.id) for m in rows]})
+
+
+@invites_bp.post("/<int:invite_id>/messages")
+@require_auth
+@limiter.limit("30 per minute", key_func=_chat_send_key)
+def send_message(invite_id: int):
+    viewer = current_user()
+    inv, err = _get_participant_invite_or_404(invite_id, viewer)
+    if err:
+        return err
+    if inv.phase != PHASE_CONFIRMED:
+        return jsonify({"error": "Chat opens once the game is confirmed"}), 409
+    data = parse_json(CreateMessageSchema)
+    msg = Message(invite_id=inv.id, sender_id=viewer.id, body=data.body)
+    db.session.add(msg)
+    db.session.commit()
+    _publish_chat(inv)
+    return jsonify({"message": msg.to_dict(viewer.id)}), 201

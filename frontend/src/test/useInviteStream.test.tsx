@@ -74,12 +74,14 @@ describe("useInviteStream", () => {
     expect(es.url).toMatch(/\/stream$/);
   });
 
-  it("invalidates invites AND sessions on EVERY open (covers fresh login, not just reconnect)", () => {
+  it("invalidates invites, sessions AND chat on EVERY open (covers fresh login, not just reconnect)", () => {
     renderHook(() => useInviteStream(true), { wrapper: wrapper(qc) });
     const es = MockEventSource.instances[0];
     es.open(); // first connect of the session
-    expect(keysInvalidated()).toEqual(expect.arrayContaining(["invites", "sessions"]));
-    expect(spy).toHaveBeenCalledTimes(2);
+    // The connect sweep covers chat too: any open panel refetches its thread
+    // (the ['chat'] prefix matches every ['chat', inviteId] query).
+    expect(keysInvalidated()).toEqual(expect.arrayContaining(["invites", "sessions", "chat"]));
+    expect(spy).toHaveBeenCalledTimes(3);
   });
 
   it("invalidates on an 'invites' message and ignores unrelated/malformed frames", () => {
@@ -94,6 +96,23 @@ describe("useInviteStream", () => {
     spy.mockClear();
     es.message(JSON.stringify({ type: "something-else" }));
     es.message("not json at all {");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("invalidates exactly that game's thread on a 'chat' message", () => {
+    renderHook(() => useInviteStream(true), { wrapper: wrapper(qc) });
+    const es = MockEventSource.instances[0];
+    es.open();
+    spy.mockClear();
+
+    es.message(JSON.stringify({ type: "chat", inviteId: 42 }));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["chat", 42] });
+
+    // A chat frame without a numeric thread id is ignored, not a broad refetch.
+    spy.mockClear();
+    es.message(JSON.stringify({ type: "chat" }));
+    es.message(JSON.stringify({ type: "chat", inviteId: "42" }));
     expect(spy).not.toHaveBeenCalled();
   });
 

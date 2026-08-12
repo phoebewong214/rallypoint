@@ -13,6 +13,7 @@ import {
 import { useToast } from "../contexts/ToastContext";
 import { ScheduleModal } from "../components/ScheduleModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ChatPanel } from "../components/ChatPanel";
 import { Skeleton } from "../components/Skeleton";
 
 // `status` is already viewer-relative (see Session.display_status): "pending"
@@ -131,6 +132,13 @@ function RowActions({ s, h, busy }: { s: any; h: RowHandlers; busy?: boolean }) 
 
 function SessionRow({ s, h, busy }: { s: any; h: RowHandlers; busy?: boolean }) {
   const range = s.kind === "invite" && s.isWindow ? windowRange(s) : null;
+  // Chat lives on confirmed games. Those render as materialized session rows
+  // carrying the originating invite's id (the thread key); legacy sessions
+  // never had an invite, so they have no thread and no chat entry.
+  const chatId = s.kind === "session" && s.status === "confirmed" && s.bucket !== "past"
+    ? s.inviteId ?? null
+    : null;
+  const [chatOpen, setChatOpen] = useState(false);
   return (
     <article className={"session" + (s.next ? " next" : "")}>
       <div className="date-block">
@@ -198,9 +206,21 @@ function SessionRow({ s, h, busy }: { s: any; h: RowHandlers; busy?: boolean }) 
         )}
 
         <div className="sess-actions">
+          {chatId != null && (
+            <button
+              className={"btn-sm ghost" + (chatOpen ? " active" : "")}
+              type="button"
+              aria-expanded={chatOpen}
+              onClick={() => setChatOpen((v) => !v)}
+            >
+              <Icon name="message" size={14} /> {chatOpen ? "Hide chat" : "Chat"}
+            </button>
+          )}
           <RowActions s={s} h={h} busy={busy} />
         </div>
       </div>
+
+      {chatId != null && chatOpen && <ChatPanel inviteId={chatId} opp={s.opp} />}
     </article>
   );
 }

@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify
 from sqlalchemy import and_, or_
 
 from extensions import db
-from models import Court, Session, SessionStatus, User
+from models import Court, GameInvite, Session, SessionStatus, User
 from schemas import CreateSessionSchema, RescheduleSessionSchema
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
@@ -48,7 +48,18 @@ def list_sessions():
         .order_by(Session.scheduled_at.desc())
         .all()
     )
-    return jsonify({"sessions": [s.to_dict(viewer.id) for s in rows]})
+    # A session materialized from a game invite carries that invite's id: the
+    # per-game chat thread is keyed by invite (stable across the whole life of
+    # the game), so the confirmed card needs it to open its chat. Batched here
+    # to avoid a per-row lookup; legacy sessions get null (no thread).
+    invite_ids = dict(
+        db.session.query(GameInvite.session_id, GameInvite.id)
+        .filter(GameInvite.session_id.in_([s.id for s in rows]))
+        .all()
+    ) if rows else {}
+    return jsonify({"sessions": [
+        {**s.to_dict(viewer.id), "inviteId": invite_ids.get(s.id)} for s in rows
+    ]})
 
 
 @sessions_bp.post("")
