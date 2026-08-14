@@ -4344,3 +4344,79 @@ button.updays-day.selected:hover {
   .sched-block-title { font-size: 10px; }
   .sched-block-meta, .sched-block-time, .sb-lvl { display: none; }
 }
+
+/* ---- chat unread indicators (RP-FEAT-003) ---- */
+/* Red dot on the My Games nav tab: unread chat exists somewhere. Independent
+   of .nav-badge (the green to-do count) — the two can appear side by side. */
+.nav-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--rose);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+/* Unread count riding a card's Chat button, e.g. [Chat (2)]. */
+.chat-btn-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: var(--rose);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1;
+}
+
+/* ---- chat modal (the thread in a centered dialog; ChatModal.tsx) ---- */
+.chat-modal .chat-panel {
+  /* the panel's card-embedded chrome doesn't apply inside the dialog */
+  border-top: none;
+  padding-top: 0;
+}
+.chat-modal .chat-msgs {
+  max-height: min(52vh, 420px);
+  min-height: 160px;
+}
+.chat-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chat-modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+.chat-modal-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+@media (max-width: 560px) {
+  /* Phones: the dialog takes the whole viewport (minus the backdrop inset)
+     and the message list stretches to fill it. */
+  .chat-modal {
+    max-width: none !important;
+    height: 100%;
+  }
+  .chat-modal .chat-panel {
+    flex: 1;
+    min-height: 0;
+  }
+  .chat-modal .chat-msgs {
+    flex: 1;
+    max-height: none;
+  }
+}

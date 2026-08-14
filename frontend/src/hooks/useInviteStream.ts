@@ -9,9 +9,10 @@ const RECONNECT_MS = 30_000;
 
 /** Real-time invite + chat updates. Subscribes to the backend SSE channel
     (GET /api/stream, cookie auth) and, on every `invites` event, invalidates
-    the ['invites'] and ['sessions'] queries; a `chat` event invalidates just
-    that game's ['chat', inviteId] thread — data flows through the normal
-    query path, the stream only says "refetch now".
+    the ['invites'] and ['sessions'] queries; a `chat` event invalidates that
+    game's ['chat', inviteId] thread plus the unread surfaces (['chatUnread']
+    total and the ['sessions'] rows carrying per-card counts) — data flows
+    through the normal query path, the stream only says "refetch now".
 
     Degradation ladder: EventSource retries transient drops natively; while the
     stream is down we poll the same invalidation every 30s; when the browser
@@ -36,10 +37,12 @@ export function useInviteStream(enabled: boolean) {
     };
     /* The catch-up sweep (poll fallback + every successful connect): everything
        the stream would have nudged, including any open chat thread — the
-       ['chat'] prefix matches all ['chat', inviteId] queries. */
+       ['chat'] prefix matches all ['chat', inviteId] queries — and the
+       unread total behind the nav dot. */
     const invalidate = () => {
       invalidateInvites();
       qc.invalidateQueries({ queryKey: ["chat"] });
+      qc.invalidateQueries({ queryKey: ["chatUnread"] });
     };
     const stopPolling = () => {
       if (pollTimer !== null) {
@@ -68,7 +71,11 @@ export function useInviteStream(enabled: boolean) {
           if (msg?.type === "invites") {
             invalidateInvites();
           } else if (msg?.type === "chat" && typeof msg.inviteId === "number") {
+            // The thread itself, plus both unread surfaces: the nav-dot total
+            // and the per-card counts (which ride the sessions rows).
             qc.invalidateQueries({ queryKey: ["chat", msg.inviteId] });
+            qc.invalidateQueries({ queryKey: ["chatUnread"] });
+            qc.invalidateQueries({ queryKey: ["sessions"] });
           }
         } catch {
           /* ignore malformed frames */

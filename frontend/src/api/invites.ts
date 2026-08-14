@@ -58,6 +58,15 @@ export const chatApi = {
       method: "POST",
       body: { body },
     }),
+  // Advance the server-side read position (forward-only there); lastReadId is
+  // the highest message id the client has rendered.
+  markRead: (inviteId: number, lastReadId: number) =>
+    api<{ unread: number }>(`/invites/${inviteId}/messages/read`, {
+      method: "POST",
+      body: { lastReadId },
+    }),
+  // Viewer's unread total across live threads — feeds the nav red dot.
+  unreadTotal: () => api<{ total: number }>("/chat/unread-total"),
 };
 
 export const invitesApi = {

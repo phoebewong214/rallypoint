@@ -15,6 +15,7 @@ export function Modal({
   onSubmit,
   maxWidth = 420,
   initialFocusRef,
+  className,
   children,
 }: {
   ariaLabel: string;
@@ -22,6 +23,9 @@ export function Modal({
   onSubmit?: (e: React.FormEvent) => void;
   maxWidth?: number;
   initialFocusRef?: React.RefObject<any>;
+  /** Extra class on the card, for modals needing CSS the inline base style
+      can't express (e.g. the chat modal going full-screen on phones). */
+  className?: string;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -56,9 +60,9 @@ export function Modal({
       }}
     >
       {onSubmit ? (
-        <form onClick={stop} onSubmit={onSubmit} style={cardStyle}>{children}</form>
+        <form onClick={stop} onSubmit={onSubmit} style={cardStyle} className={className}>{children}</form>
       ) : (
-        <div onClick={stop} style={cardStyle}>{children}</div>
+        <div onClick={stop} style={cardStyle} className={className}>{children}</div>
       )}
     </div>
   );

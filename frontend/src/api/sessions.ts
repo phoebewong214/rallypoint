@@ -21,6 +21,9 @@ export interface ApiSession {
   // Set when this session was materialized from a game invite — the id of that
   // invite, which keys the game's chat thread. Null for legacy sessions.
   inviteId?: number | null;
+  // Unread chat messages in that thread for the viewer (own messages never
+  // count). Always 0 for legacy sessions.
+  unreadCount?: number;
   next?: boolean;
 }
 

@@ -46,6 +46,12 @@ class DeclineInviteSchema(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=200)
 
 
+class MarkReadSchema(BaseModel):
+    # The highest message id the client has rendered. The route clamps it to the
+    # thread's real max id and only ever moves the stored position forward.
+    lastReadId: int = Field(gt=0)
+
+
 class CreateMessageSchema(BaseModel):
     # Length bounds apply to the STRIPPED body: an all-whitespace message is
     # empty (422), and trailing padding can't smuggle past the 1000-char cap.
