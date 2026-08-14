@@ -8,6 +8,7 @@ import { useAuth } from "./contexts/AuthContext";
 import { useTheme } from "./contexts/ThemeContext";
 import { useSessions } from "./hooks/useSessions";
 import { useInvites } from "./hooks/useInvites";
+import { useChatUnread } from "./hooks/useChat";
 import { actionNeededCount } from "./lib/actionNeeded";
 import { playerPhotoUrl } from "./api/client";
 
@@ -188,6 +189,12 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
   const { data: invitesData } = useInvites(!!user);
   const requestCount = actionNeededCount(sessionsData?.sessions, invitesData?.invites);
 
+  // Unread chat anywhere → a red dot on "My Games" (its own element and its
+  // own server-side count; deliberately NOT folded into the green to-do badge,
+  // which keeps its exact meaning and styling).
+  const { data: unreadData } = useChatUnread(!!user);
+  const chatUnread = unreadData?.total ?? 0;
+
   // Admins get an extra "Admin" entry; everyone else sees the standard links.
   const navLinks: NavLinkDef[] = user?.isAdmin
     ? [...NAV_LINKS, { id: "admin", label: "Admin", to: "/admin" }]
@@ -227,6 +234,9 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
                 {l.label}
                 {l.id === "matches" && requestCount > 0 && (
                   <span className="nav-badge" aria-label={`${requestCount} pending request${requestCount === 1 ? "" : "s"}`}>{requestCount}</span>
+                )}
+                {l.id === "matches" && chatUnread > 0 && (
+                  <span className="nav-dot" role="status" aria-label="New chat messages" />
                 )}
               </NavLink>
             ))}
@@ -310,6 +320,9 @@ export const TopNav: React.FC<TopNavProps> = ({ active, hideUser, hideLinks }) =
                     {l.label}
                     {l.id === "matches" && requestCount > 0 && (
                       <span className="nav-badge" aria-label={`${requestCount} pending request${requestCount === 1 ? "" : "s"}`}>{requestCount}</span>
+                    )}
+                    {l.id === "matches" && chatUnread > 0 && (
+                      <span className="nav-dot" role="status" aria-label="New chat messages" />
                     )}
                   </NavLink>
                 ))}

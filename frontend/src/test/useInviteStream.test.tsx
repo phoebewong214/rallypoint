@@ -74,14 +74,17 @@ describe("useInviteStream", () => {
     expect(es.url).toMatch(/\/stream$/);
   });
 
-  it("invalidates invites, sessions AND chat on EVERY open (covers fresh login, not just reconnect)", () => {
+  it("invalidates invites, sessions, chat AND the unread total on EVERY open (covers fresh login, not just reconnect)", () => {
     renderHook(() => useInviteStream(true), { wrapper: wrapper(qc) });
     const es = MockEventSource.instances[0];
     es.open(); // first connect of the session
     // The connect sweep covers chat too: any open panel refetches its thread
-    // (the ['chat'] prefix matches every ['chat', inviteId] query).
-    expect(keysInvalidated()).toEqual(expect.arrayContaining(["invites", "sessions", "chat"]));
-    expect(spy).toHaveBeenCalledTimes(3);
+    // (the ['chat'] prefix matches every ['chat', inviteId] query), and the
+    // nav dot's ['chatUnread'] total resyncs to this account.
+    expect(keysInvalidated()).toEqual(
+      expect.arrayContaining(["invites", "sessions", "chat", "chatUnread"]),
+    );
+    expect(spy).toHaveBeenCalledTimes(4);
   });
 
   it("invalidates on an 'invites' message and ignores unrelated/malformed frames", () => {
@@ -99,15 +102,19 @@ describe("useInviteStream", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("invalidates exactly that game's thread on a 'chat' message", () => {
+  it("invalidates that game's thread plus both unread surfaces on a 'chat' message", () => {
     renderHook(() => useInviteStream(true), { wrapper: wrapper(qc) });
     const es = MockEventSource.instances[0];
     es.open();
     spy.mockClear();
 
     es.message(JSON.stringify({ type: "chat", inviteId: 42 }));
-    expect(spy).toHaveBeenCalledTimes(1);
+    // The thread itself, the nav-dot total, and the sessions rows that carry
+    // the per-card unread counts — and nothing broader (no ['invites']).
+    expect(spy).toHaveBeenCalledTimes(3);
     expect(spy).toHaveBeenCalledWith({ queryKey: ["chat", 42] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["chatUnread"] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["sessions"] });
 
     // A chat frame without a numeric thread id is ignored, not a broad refetch.
     spy.mockClear();

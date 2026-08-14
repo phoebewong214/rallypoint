@@ -24,3 +24,30 @@ export function useSendChatMessage(inviteId: number) {
     },
   });
 }
+
+/* The viewer's unread total across live threads, keyed ['chatUnread'] — the
+   key the SSE `chat` nudge (and the fallback poll sweep) invalidates — so the
+   nav red dot lights up from any page within push latency. */
+export function useChatUnread(enabled = true) {
+  return useQuery({
+    queryKey: ["chatUnread"],
+    queryFn: chatApi.unreadTotal,
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+/* Report the read position (highest message id rendered). The server only
+   moves it forward, so racing reports are harmless. Success invalidates the
+   two unread surfaces — nav dot total and per-card counts — so they clear
+   right away instead of waiting for the next sweep. */
+export function useMarkChatRead(inviteId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lastReadId: number) => chatApi.markRead(inviteId, lastReadId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["chatUnread"] });
+      qc.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+}

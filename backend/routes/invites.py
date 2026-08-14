@@ -16,6 +16,7 @@ specific time until one side accepts.
   GET  /api/invites                        the viewer's open invites (read path)
   GET  /api/invites/<id>/messages          the game's chat thread (participants only)
   POST /api/invites/<id>/messages          send a chat message (confirmed games only)
+  POST /api/invites/<id>/messages/read     advance the viewer's read position
 """
 import hashlib
 import json
@@ -23,21 +24,26 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_limiter.util import get_remote_address
-from sqlalchemy import or_
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db, limiter
-from models import AIMatchLog, GameInvite, Message, Session, SessionStatus, User, Court
+from models import (
+    AIMatchLog, GameInvite, Message, MessageRead, Session, SessionStatus, User, Court,
+)
 from models.game_invite import (
     TimeProposal, PHASE_AWAITING, PHASE_SETTLING, PHASE_CONFIRMED,
     PHASE_DECLINED, PHASE_CANCELLED, OPEN_PHASES,
 )
 from schemas.invites import (
-    CreateInviteSchema, CreateMessageSchema, DeclineInviteSchema, ProposeTimeSchema,
+    CreateInviteSchema, CreateMessageSchema, DeclineInviteSchema, MarkReadSchema,
+    ProposeTimeSchema,
 )
 from services.auth import extract_bearer
 from services.email import send_email
 from services.matching import score_and_reason
 from services.stream import broker
+from services.unread import unread_counts
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -437,3 +443,41 @@ def send_message(invite_id: int):
     db.session.commit()
     _publish_chat(inv)
     return jsonify({"message": msg.to_dict(viewer.id)}), 201
+
+
+@invites_bp.post("/<int:invite_id>/messages/read")
+@require_auth
+def mark_messages_read(invite_id: int):
+    """Advance the viewer's read position in this thread (any phase — history
+    of a dead game can be read, so it can be marked read too). Forward-only:
+    a stale tab reporting an old id can't resurrect cleared unread badges. The
+    reported id is clamped to the thread's real tail so a client can't
+    pre-read messages that don't exist yet."""
+    viewer = current_user()
+    inv, err = _get_participant_invite_or_404(invite_id, viewer)
+    if err:
+        return err
+    data = parse_json(MarkReadSchema)
+    tail = db.session.query(func.max(Message.id)).filter(
+        Message.invite_id == inv.id).scalar() or 0
+    target = min(data.lastReadId, tail)
+
+    row = MessageRead.query.filter_by(invite_id=inv.id, user_id=viewer.id).first()
+    if row is None and target > 0:
+        try:
+            db.session.add(MessageRead(
+                invite_id=inv.id, user_id=viewer.id, last_read_message_id=target))
+            db.session.commit()
+        except IntegrityError:
+            # Another request (second device/tab) created the row first — fall
+            # through and advance it like any existing row.
+            db.session.rollback()
+            row = MessageRead.query.filter_by(
+                invite_id=inv.id, user_id=viewer.id).first()
+    if row is not None and target > row.last_read_message_id:
+        row.last_read_message_id = target
+        db.session.commit()
+
+    # 0 whenever the client reported the id it just rendered — returned so the
+    # caller can reconcile without a second request if it was behind.
+    return jsonify({"unread": unread_counts(viewer.id, [inv.id]).get(inv.id, 0)})

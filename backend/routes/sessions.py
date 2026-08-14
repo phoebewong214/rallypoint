@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_
 from extensions import db
 from models import Court, GameInvite, Session, SessionStatus, User
 from schemas import CreateSessionSchema, RescheduleSessionSchema
+from services.unread import unread_counts
 from utils.decorators import require_auth, current_user
 from utils.validate import parse_json
 
@@ -57,8 +58,17 @@ def list_sessions():
         .filter(GameInvite.session_id.in_([s.id for s in rows]))
         .all()
     ) if rows else {}
+    # Unread chat per thread (viewer-relative, own messages excluded) so the
+    # card's chat button can show a count. One aggregate query; legacy
+    # sessions have no thread and stay at 0.
+    unread = unread_counts(viewer.id, invite_ids.values())
     return jsonify({"sessions": [
-        {**s.to_dict(viewer.id), "inviteId": invite_ids.get(s.id)} for s in rows
+        {
+            **s.to_dict(viewer.id),
+            "inviteId": invite_ids.get(s.id),
+            "unreadCount": unread.get(invite_ids.get(s.id), 0),
+        }
+        for s in rows
     ]})
 
 
