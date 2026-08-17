@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
 import { ChatPanel } from "./ChatPanel";
 import { Icon } from "../rally-shared";
@@ -49,7 +50,15 @@ export function ChatModal({
     return () => clearTimeout(t);
   }, [latestId]);
 
-  return (
+  // PORTAL, not in-place: this dialog mounts inside a session card, and
+  // `.session:hover` applies a transform (any transform makes the card the
+  // containing block for `position: fixed`) while `.session` also clips with
+  // overflow: hidden — so rendered in place, the "viewport-fixed" backdrop is
+  // positioned AND clipped inside the card (the "dialog stuck in the card"
+  // production bug). Portaling to document.body restores real viewport
+  // positioning. The page-level modals (ScheduleModal etc.) have no
+  // transformed ancestor and are left exactly as they were.
+  return createPortal(
     <Modal
       ariaLabel={`Chat with ${opp ?? "your partner"}`}
       onClose={onClose}
@@ -71,6 +80,7 @@ export function ChatModal({
         </button>
       </header>
       <ChatPanel inviteId={inviteId} opp={opp} />
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }

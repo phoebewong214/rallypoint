@@ -254,7 +254,12 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 1000;
+  /* Above the modal layer (Modal.tsx backdrop = 1000), below WakeBanner (2000).
+     Page-level modals render before this stack in DOM order, so equal z-index
+     already left toasts on top for them; the chat dialog portals to <body>
+     (after #root) and would otherwise paint OVER the toasts — dimming them
+     behind a click-capturing backdrop. */
+  z-index: 1100;
   display: flex;
   flex-direction: column;
   gap: 10px;

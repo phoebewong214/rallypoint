@@ -116,6 +116,9 @@ push.
   (scheme + host, no trailing slash).
 - **Browser tries `localhost:5050` in production?** Vercel is missing
   `VITE_API_URL`, or it was added after the build. Set it and redeploy.
+- **A tab still shows the old UI after a deploy?** The SPA bundle loads once per
+  tab — tabs opened before the deploy keep running the old code until a hard
+  refresh (Cmd/Ctrl+Shift+R).
 - **Emails go to spam / not sent?** Resend domain must be *Verified*; `SMTP_FROM`
   must use that domain.
 - **First request very slow?** Render free tier sleeps; a CI keep-warm ping and a
