@@ -79,4 +79,16 @@ describe("SessionRow chat entry", () => {
     renderRow(confirmedRow({ inviteId: null }));
     expect(screen.queryByRole("button", { name: /Chat/ })).not.toBeInTheDocument();
   });
+
+  it("portals the dialog OUT of the session card (hover-transform + overflow:hidden would trap a fixed backdrop)", async () => {
+    renderRow(confirmedRow({ unreadCount: 1 }));
+    fireEvent.click(screen.getByRole("button", { name: /Chat/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Chat with Alex" });
+    // `.session:hover` sets a transform, making the <article> the containing
+    // block for position:fixed — and `.session` clips with overflow:hidden. A
+    // dialog rendered inside the article gets pinned and clipped to the card
+    // (the production bug). The portal must put it under document.body.
+    expect(dialog.closest("article")).toBeNull();
+    expect(document.body.contains(dialog)).toBe(true);
+  });
 });

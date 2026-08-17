@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import type { IconName } from "../types";
 import { TopNav, Icon, Avatar } from "../rally-shared";
@@ -146,6 +146,10 @@ export function SessionRow({ s, h, busy }: { s: any; h: RowHandlers; busy?: bool
     : null;
   const unread = chatId != null ? s.unreadCount ?? 0 : 0;
   const [chatOpen, setChatOpen] = useState(false);
+  // Stable identity as defense in depth: Modal's side effects are immune to a
+  // changing onClose (see Modal.tsx), but the chat dialog re-renders a lot
+  // while open (unread refetches), so don't hand it a fresh closure each time.
+  const closeChat = useCallback(() => setChatOpen(false), []);
   return (
     <article className={"session" + (s.next ? " next" : "")}>
       <div className="date-block">
@@ -240,7 +244,7 @@ export function SessionRow({ s, h, busy }: { s: any; h: RowHandlers; busy?: bool
           inviteId={chatId}
           opp={s.opp}
           when={gameWhen(s)}
-          onClose={() => setChatOpen(false)}
+          onClose={closeChat}
         />
       )}
     </article>
